@@ -9,7 +9,7 @@ final class KeychainToolTests: XCTestCase {
         data.map { String(format: "%02x", $0) }.joined()
     }
 
-    /// 通常の大きさは対話モードで渡し、値が他プロセスから見える引数に出ないこと。
+    /// A normal-sized value is passed through interactive mode, and never ends up in an argument visible to other processes.
     func testShortPayloadGoesThroughStandardInput() throws {
         let payload = Data(#"{"claudeAiOauth":{"accessToken":"fixture"}}"#.utf8)
         let invocation = KeychainTool.writeInvocation(payload, service: service, account: "fixture-user")
@@ -23,8 +23,8 @@ final class KeychainToolTests: XCTestCase {
         )
     }
 
-    /// 1行の上限を超えた行を対話モードへ渡すと、切り詰めた値で資格情報を上書きしてしまう。
-    /// 実際の項目はMCPのトークンを含めて5KBを超えることがある。
+    /// Passing a line over the single-line limit into interactive mode would overwrite the credential with a truncated value.
+    /// A real item can exceed 5KB once it includes an MCP token.
     func testPayloadThatWouldOverflowTheInteractiveLineNeverUsesIt() {
         for size in [1_900, 1_990, 2_000, 5_300, 20_000] {
             let payload = Data(repeating: 0x61, count: size)
@@ -44,7 +44,7 @@ final class KeychainToolTests: XCTestCase {
         )
     }
 
-    /// 引用符を含む名前は対話モードの行を壊すので使わない。
+    /// A name containing a quote would break the interactive-mode line, so it isn't used.
     func testAccountThatWouldBreakTheInteractiveLineFallsBackToArguments() {
         let invocation = KeychainTool.writeInvocation(Data("{}".utf8), service: service, account: "a\"b")
         XCTAssertNil(invocation.standardInput)
@@ -64,11 +64,11 @@ final class KeychainToolTests: XCTestCase {
         let json = Data(#"{"claudeAiOauth":{"accessToken":"fixture"}}"#.utf8)
         XCTAssertEqual(KeychainTool.decodePasswordOutput(json + Data("\n".utf8)), json)
 
-        // ASCII以外を含む値は16進で出力される。
+        // A value containing non-ASCII is output as hex.
         let nonASCII = Data(#"{"mcpOAuth":{"名前":"値"}}"#.utf8)
         XCTAssertEqual(KeychainTool.decodePasswordOutput(Data((hex(nonASCII) + "\n").utf8)), nonASCII)
 
-        // どちらでもなければそのまま返し、形の判定は呼び出し側に任せる。
+        // If it's neither, return it as-is and leave judging its shape to the caller.
         XCTAssertEqual(KeychainTool.decodePasswordOutput(Data("not json\n".utf8)), Data("not json".utf8))
     }
 }

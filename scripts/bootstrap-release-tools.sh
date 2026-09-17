@@ -1,5 +1,5 @@
 #!/bin/bash
-# DMGレイアウト生成ツールを、リリース処理とは分離して固定バージョンで準備する。
+# Prepares the DMG layout generation tools at a pinned version, separate from the release process.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -15,7 +15,7 @@ cleanup_on_exit() {
   local script_status=$?
   trap - EXIT
   if [ "$LOCK_HELD" -eq 1 ] && ! rmdir "$RELEASE_LOCK_DIR"; then
-    echo "release tool lockを解除できませんでした: $RELEASE_LOCK_DIR" >&2
+    echo "could not release the release tool lock: $RELEASE_LOCK_DIR" >&2
     if [ "$script_status" -eq 0 ]; then
       script_status=1
     fi
@@ -26,15 +26,15 @@ trap cleanup_on_exit EXIT
 
 mkdir -p "$ROOT/build"
 if ! mkdir "$RELEASE_LOCK_DIR" 2>/dev/null; then
-  echo "別のreleaseまたはrelease tool準備が実行中です: $RELEASE_LOCK_DIR" >&2
-  echo "実行中のprocessがないのに残っている場合だけ、空のlock directoryをrmdirしてください。" >&2
+  echo "another release or release tool preparation is running: $RELEASE_LOCK_DIR" >&2
+  echo "Only rmdir the empty lock directory if you've confirmed no process is actually running." >&2
   exit 1
 fi
 LOCK_HELD=1
 mkdir -p "$TOOLS_ROOT"
 
 if ! command -v "$PYTHON" >/dev/null 2>&1; then
-  echo "Python 3.10以降が必要です: $PYTHON" >&2
+  echo "Python 3.10 or later is required: $PYTHON" >&2
   exit 1
 fi
 
@@ -42,7 +42,7 @@ PYTHON_VERSION=$(
   "$PYTHON" -c 'import sys; print(".".join(map(str, sys.version_info[:2])))'
 )
 if ! "$PYTHON" -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; then
-  echo "Python 3.10以降が必要です（現在: ${PYTHON_VERSION}）" >&2
+  echo "Python 3.10 or later is required (current: ${PYTHON_VERSION})" >&2
   exit 1
 fi
 

@@ -1,28 +1,28 @@
 import Foundation
 
-/// プラン名の表記ゆれを整える。
+/// Normalizes inconsistent plan-name spellings.
 ///
-/// 各ツールが返すのは内部識別子（Codex の `prolite` など）だったり、
-/// すでに表示用の名前（Grok の `X Premium+`）だったりする。
-/// 対応表に無いものは推測せず、読める形に整えるだけに留める。
+/// What each tool returns can be an internal identifier (e.g. Codex's `prolite`), or
+/// already a display-ready name (e.g. Grok's `X Premium+`).
+/// Anything not in the lookup table isn't guessed at — it's only tidied into a readable form.
 enum PlanLabel {
     private static let known: [String: String] = [
         // OpenAI / Codex
         "free": "Free",
         "plus": "Plus",
         "pro": "Pro",
-        "prolite": "Pro",   // 内部識別子。等級までは表に出さない
+        "prolite": "Pro",   // An internal identifier; the tier isn't surfaced in the display
         "team": "Team",
         "business": "Business",
         "enterprise": "Enterprise",
         "edu": "Edu",
-        // Anthropic / Claude。倍率付きの識別子で来ることがあるが、等級は表に出さない。
+        // Anthropic / Claude. Can come in as an identifier with a multiplier, but the tier isn't surfaced in the display.
         "max": "Max",
         "max5x": "Max",
         "max20x": "Max",
     ]
 
-    /// 頭に付くことがある名前空間。落としてから対応表を引く。
+    /// A namespace that can be prefixed. Stripped before checking the lookup table.
     private static let prefixes = ["claudeai", "claude", "anthropic", "chatgpt", "openai"]
 
     static func normalize(_ raw: String?) -> String? {
@@ -48,11 +48,11 @@ enum PlanLabel {
         }
         if let mapped = known[key] { return mapped }
 
-        // すでに表示用の名前（空白や大文字を含む）ならそのまま活かす。
+        // If it's already a display-ready name (contains spaces or uppercase letters), use it as-is.
         if trimmed.contains(" ") || trimmed.rangeOfCharacter(from: .uppercaseLetters) != nil {
             return String(trimmed.prefix(128))
         }
-        // 未知の識別子は区切りで割って語ごとに整える。max_20x -> Max 20x
+        // An unknown identifier is split on delimiters and title-cased word by word. max_20x -> Max 20x
         return String(trimmed
             .split(whereSeparator: { $0 == "_" || $0 == "-" })
             .map(\.capitalized)

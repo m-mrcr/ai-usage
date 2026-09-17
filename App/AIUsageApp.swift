@@ -19,7 +19,7 @@ struct AIUsageApp: App {
         }
         .menuBarExtraStyle(.window)
         .commands {
-            // macOSアプリの定位置。設定やヘルプを開いている間はアプリメニューから辿れる。
+            // The standard macOS spot. Reachable from the app menu while Settings or Help is open.
             CommandGroup(after: .appInfo) {
                 CheckForUpdatesCommand(updater: model.updater, language: model.language)
             }
@@ -27,7 +27,7 @@ struct AIUsageApp: App {
     }
 }
 
-/// アプリメニューの「アップデートを確認…」。確認中など押せない間は無効にする。
+/// The app menu's "Check for Updates…". Disabled while it can't be pressed, e.g. during a check.
 private struct CheckForUpdatesCommand: View {
     @ObservedObject var updater: AppUpdater
     let language: AppLanguage
@@ -40,7 +40,7 @@ private struct CheckForUpdatesCommand: View {
     }
 }
 
-/// メニューバーに出す要約。最も逼迫しているウィンドウの使用率を出す。
+/// The summary shown in the menu bar. Shows the usage of the most constrained window.
 struct MenuBarLabel: View {
     let snapshot: UsageSnapshot
     let isRefreshing: Bool
@@ -100,17 +100,18 @@ final class UsageModel: ObservableObject {
 
     @Published private(set) var language: AppLanguage = LanguagePreference.load()
 
-    /// アプリ本体の更新を管理する。WidgetにはSparkleを含めない。
+    /// Manages the main app's updates. Sparkle is not included in the Widget.
     let updater = AppUpdater()
 
-    /// 画面に並べるカード。ドラッグ中はここだけを動かして着地点を見せ、
-    /// 指を離した時点で永続化する。収集のたびに並びが飛ぶのを防ぐための分離。
+    /// The cards laid out on screen. While dragging, only this array is moved to show
+    /// where a card will land; it's persisted on mouse-up. Kept separate so the order
+    /// doesn't jump on every collection cycle.
     @Published private(set) var orderedAgents: [AgentUsage] = []
 
-    /// いま掴んでいるカード。nil ならドラッグしていない。
+    /// The card currently being held. nil means nothing is being dragged.
     @Published var draggingID: String?
 
-    /// Dock に出すかどうか。LSUIElement で常駐起動しつつ、実行時に切り替える。
+    /// Whether to show in the Dock. Launches resident via LSUIElement, and is toggled at runtime.
     @Published var showsInDock: Bool = UserDefaults.standard.bool(forKey: "showsInDock") {
         didSet {
             UserDefaults.standard.set(showsInDock, forKey: "showsInDock")
@@ -118,21 +119,21 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    /// 利用者が並べ替えた表示順。空なら自動判定に任せる。
+    /// The display order the user arranged. If empty, leave it to automatic ordering.
     @Published private(set) var agentOrder: [String] =
         UserDefaults.standard.stringArray(forKey: "agentOrder") ?? []
 
-    /// 設定で伏せたエージェント。収集はするが、どこにも表示しない。
+    /// Agents hidden in Settings. Still collected, but never shown anywhere.
     @Published private(set) var hiddenAgentIDs: Set<String> =
         Set(UserDefaults.standard.stringArray(forKey: "hiddenAgentIDs") ?? [])
 
-    /// モデル別の補助枠（Codexのモデル専用上限など）を出すか。
-    /// 使っていないモデルの枠は0%のまま並ぶだけなので既定は伏せる。
+    /// Whether to show per-model supplementary windows (e.g. Codex's model-specific limits).
+    /// An unused model's window just sits at 0%, so it's hidden by default.
     @Published private(set) var showsModelLimits: Bool =
         UserDefaults.standard.bool(forKey: "showsModelLimits")
 
-    /// 補助枠を出さない設定なら、表示前に落とす。
-    /// メニューバー・一覧・ウィジェットが同じ判断を共有できるよう1か所にまとめる。
+    /// If supplementary windows are set to be hidden, drop them before display.
+    /// Kept in one place so the menu bar, list, and widget all share the same decision.
     private func presented(_ agents: [AgentUsage]) -> [AgentUsage] {
         guard !showsModelLimits else { return agents }
         return agents.map { agent in
@@ -143,11 +144,11 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    /// 設定画面用。伏せたエージェントも含めて出すが、枠の絞り込みは他の画面と揃える。
-    /// ここだけ補助枠が残ると、トグルを切っているのに一覧へ出て混乱する。
+    /// For the Settings screen. Includes hidden agents, but keeps the same window filtering as other screens.
+    /// If supplementary windows leaked through here, they'd show up in the list even with the toggle off, which would be confusing.
     var allAgents: [AgentUsage] { presented(reordered(snapshot.agents, by: agentOrder)) }
 
-    /// 表示対象だけに絞ったスナップショット。メニューバーとウィジェットはこれを見る。
+    /// A snapshot narrowed down to only what should be displayed. The menu bar and widget look at this.
     var visibleSnapshot: UsageSnapshot {
         let visible = presented(reordered(snapshot.agents, by: agentOrder))
             .filter { !hiddenAgentIDs.contains($0.id) }
@@ -162,8 +163,8 @@ final class UsageModel: ObservableObject {
 
     func isHidden(_ id: String) -> Bool { hiddenAgentIDs.contains(id) }
 
-    /// claude.ai のセッション。値そのものは出さず、いつログインしたかだけを持つ。
-    /// 末尾数文字を出しても利用者には照合する手段がなく、判断の材料にならない。
+    /// The claude.ai session. Never exposes the value itself, only when the sign-in happened.
+    /// Showing the last few characters wouldn't give the user any way to verify it, so it isn't useful.
     @Published private(set) var claudeSessionSavedAt: Date?
 
     var hasClaudeSessionKey: Bool { claudeSessionSavedAt != nil }
@@ -172,7 +173,7 @@ final class UsageModel: ObservableObject {
         claudeSessionSavedAt = ClaudeSessionKey.load() == nil ? nil : ClaudeSessionKey.savedAt()
     }
 
-    /// WebViewが鍵を保存した直後に呼ばれる。保存自体はView側で終わっている。
+    /// Called right after the WebView saves the key. The save itself is already done on the View side.
     func didCaptureClaudeSessionKey() {
         loadClaudeSessionKeyHint()
         refresh(force: true)
@@ -184,13 +185,13 @@ final class UsageModel: ObservableObject {
         refresh(force: true)
     }
 
-    /// cursor.com のセッション。Grok Bot と Cursor が共有する。
-    /// Claudeと同じく値そのものは持たず、ログイン時刻だけを見せる。
+    /// The cursor.com session. Shared by Grok Bot and Cursor.
+    /// As with Claude, never keeps the value itself, only the sign-in time.
     @Published private(set) var cursorSessionSavedAt: Date?
 
     var hasCursorSession: Bool { cursorSessionSavedAt != nil }
 
-    /// どちらのアプリも入っていない環境で設定を出しても意味がない。
+    /// There's no point showing settings in an environment where neither app is installed.
     var showsCursorSection: Bool {
         GrokBotCollector.installed || CursorCollector.installed || hasCursorSession
     }
@@ -210,7 +211,7 @@ final class UsageModel: ObservableObject {
         refresh(force: true)
     }
 
-    /// 補助枠を持つエージェントが居るときだけ設定を出す。
+    /// Only show the setting when there's an agent with a supplementary window.
     var hasModelLimits: Bool {
         snapshot.agents.contains { $0.windows.contains(where: \.isSupplementary) }
     }
@@ -221,8 +222,8 @@ final class UsageModel: ObservableObject {
         showsModelLimits = proposed
         syncOrderedAgents()
 
-        // 公開snapshotの更新が通ってから設定を確定する。伏せるほうは特に、
-        // ウィジェットに残ったままにならないことを確かめてから保存する。
+        // Only commit the setting after the published snapshot update succeeds. For hiding especially,
+        // confirm it's actually gone from the widget before saving.
         guard publishVisible(clearOnFailure: true) else {
             showsModelLimits = previous
             syncOrderedAgents()
@@ -253,7 +254,7 @@ final class UsageModel: ObservableObject {
     private let helpController = HelpWindowController()
 
     init() {
-        // 初回はシステム言語から決めた値もApp Groupへ確定し、Widgetと揃える。
+        // On first launch, also commit the value decided from the system language to the App Group, to match the Widget.
         LanguagePreference.save(language)
         if let saved = try? SnapshotStore.loadPrivate() {
             snapshot = saved.expiringStaleData()
@@ -263,10 +264,10 @@ final class UsageModel: ObservableObject {
         applyActivationPolicy()
         AppDelegate.onReopen = { [weak self] in self?.openWindow() }
         syncOrderedAgents()
-        // 旧版の共有snapshotに非表示項目が残っていても、起動直後に公開範囲を縮める。
+        // Even if a hidden item lingers in an old shared snapshot, narrow the published scope right after launch.
         publishVisible(clearOnFailure: true)
         refresh()
-        // Claude の statusLine は起動中つねに書き込むので、短めの間隔で拾う。
+        // Claude's statusLine keeps writing constantly while it's running, so poll it at a shorter interval.
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.refresh() }
         }
@@ -279,18 +280,18 @@ final class UsageModel: ObservableObject {
 
     private func applyActivationPolicy() {
         NSApp.setActivationPolicy(showsInDock ? .regular : .accessory)
-        // Dock から外したらウィンドウも畳む。開いたままだと行き場を失う。
+        // If removed from the Dock, close the window too — leaving it open would strand it.
         if !showsInDock { windowController.close() }
     }
 
-    /// Dock アイコンのクリックから呼ばれる。
+    /// Called from a click on the Dock icon.
     func openWindow() {
         windowController.show(model: self)
     }
 
     func openSettings() {
-        // MenuBarExtra のポップオーバーは前面に浮くパネルとして存在するため、
-        // 通常レベルの設定ウィンドウを開いてもその後ろに隠れてしまう。先に畳む。
+        // The MenuBarExtra popover exists as a panel floating above everything else,
+        // so opening a normal-level settings window would just hide behind it. Close it first.
         dismissMenuBarPopover()
         loadClaudeSessionKeyHint()
         loadCursorSessionSavedAt()
@@ -322,7 +323,7 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    /// 伏せたものを除いて共有し、ウィジェットに知らせる。
+    /// Share it with hidden items excluded, and notify the widget.
     @discardableResult
     private func publishVisible(clearOnFailure: Bool = false) -> Bool {
         let visible = visibleSnapshot
@@ -353,9 +354,9 @@ final class UsageModel: ObservableObject {
         storageError = errors.isEmpty ? nil : errors.joined(separator: "\n")
     }
 
-    // MARK: - 並べ替え
+    // MARK: - Reordering
 
-    /// SwiftUIのonDragには終了callbackが無いため、欄外で離した場合もmouse-up後に必ず解除する。
+    /// SwiftUI's onDrag has no completion callback, so always clear the drag after mouse-up, even if dropped outside the list.
     func beginDrag(_ id: String) {
         draggingID = id
         dragEndTask?.cancel()
@@ -364,7 +365,7 @@ final class UsageModel: ObservableObject {
                 while NSEvent.pressedMouseButtons & 1 != 0 {
                     try await Task.sleep(for: .milliseconds(100))
                 }
-                // rowのdrop delegateへ先に確定機会を渡す。
+                // Give the row's drop delegate a chance to commit first.
                 try await Task.sleep(for: .milliseconds(200))
             } catch { return }
             guard let self, self.draggingID == id else { return }
@@ -372,7 +373,7 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    /// ドラッグ中の入れ替え。表示用の配列だけを動かすので即座に、かつ滑らかに反映される。
+    /// The swap while dragging. Only moves the display array, so it's reflected instantly and smoothly.
     func previewMove(_ dragged: String, over target: String) {
         guard dragged != target,
               let from = orderedAgents.firstIndex(where: { $0.id == dragged }),
@@ -384,7 +385,7 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    /// 指を離した時点で確定して保存する。
+    /// Commit and save at the moment the mouse is released.
     func commitOrder() {
         dragEndTask?.cancel()
         dragEndTask = nil
@@ -418,7 +419,7 @@ final class UsageModel: ObservableObject {
     private func persist(_ ids: [String]) {
         agentOrder = ids
         UserDefaults.standard.set(ids, forKey: "agentOrder")
-        // 保存した順でウィジェットにも反映させる。
+        // Reflect the saved order in the widget too.
         let agents = reordered(snapshot.agents, by: ids)
         snapshot = UsageSnapshot(
             updatedAt: snapshot.updatedAt,
@@ -439,7 +440,7 @@ final class UsageModel: ObservableObject {
         }.map(\.element)
     }
 
-    /// 収集結果を表示用の配列へ写す。ドラッグ中は触らない。
+    /// Copy the collection results into the display array. Don't touch it while dragging.
     private func syncOrderedAgents() {
         guard draggingID == nil else { return }
         orderedAgents = presented(reordered(snapshot.agents, by: agentOrder)).filter {
@@ -447,10 +448,10 @@ final class UsageModel: ObservableObject {
         }
     }
 
-    // MARK: - 収集
+    // MARK: - Collection
 
     func refresh(force: Bool = false) {
-        // ドラッグ中に並びが差し替わると掴んでいるカードが飛ぶので待つ。
+        // If the order changed mid-drag, the card being held would jump, so wait.
         guard draggingID == nil else {
             refreshPending = true
             return
@@ -504,7 +505,7 @@ final class UsageModel: ObservableObject {
         refresh(force: true)
     }
 
-    /// 一時的なKeychain/API/file read失敗で最後の実測を消さず、明示的なstale値として残す。
+    /// Don't discard the last real measurement on a transient Keychain/API/file-read failure; keep it as an explicit stale value instead.
     private func mergingUnavailableAgents(
         in fresh: UsageSnapshot,
         with previous: UsageSnapshot
@@ -531,7 +532,7 @@ final class UsageModel: ObservableObject {
                              preferredAgentID: fresh.preferredAgentID)
     }
 
-    /// 公開snapshotの縮小が成功してから設定を確定する。失敗時はUIも元へ戻す。
+    /// Only commit the setting after narrowing the published snapshot succeeds. Revert the UI too on failure.
     private func applyHiddenAgentIDs(_ proposed: Set<String>) {
         let previous = hiddenAgentIDs
         hiddenAgentIDs = proposed

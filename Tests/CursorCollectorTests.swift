@@ -7,7 +7,7 @@ final class CursorCollectorTests: XCTestCase {
         return try JSONDecoder().decode(CursorCollector.Usage.self, from: data)
     }
 
-    /// 実際の応答をそのまま通し、画面に出る値まで組み上がることを固定する。
+    /// Passes a real response through as-is, locking in that it assembles into the value shown on screen.
     func testPlanUsageBecomesAPeriodWindow() throws {
         let agent = CursorCollector.agent(from: try usage([
             "billingCycleStart": "1788332436608",
@@ -30,7 +30,7 @@ final class CursorCollectorTests: XCTestCase {
         XCTAssertEqual(agent.status, .unavailable)
     }
 
-    /// ミリ秒を秒として読むと数万年先の日付になる。桁の取り違えを弾く。
+    /// Reading milliseconds as seconds lands on a date tens of thousands of years out. Rejects the digit mix-up.
     func testEpochMillisecondsAreRejectedWhenOutOfRange() {
         XCTAssertEqual(
             CursorAPI.parseEpochMilliseconds("1790924436608"),

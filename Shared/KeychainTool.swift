@@ -1,21 +1,21 @@
 import Foundation
 import Security
 
-/// `/usr/bin/security` を介して汎用パスワード項目を読み書きする。
+/// Reads and writes a generic password item through `/usr/bin/security`.
 ///
-/// Claude Code自身がこの経路で読み書きするため、項目のアクセス設定には常に
-/// `/usr/bin/security`（パーティション `apple-tool:`）が残る。Security frameworkで
-/// 直接触ると、書き込みのたびにパーティションが書き手自身へ置き換わり、締め出された
-/// 側はアクセスのたびにログインパスワードを求められる。同じ道具を使えば、どちらが
-/// 書いても互いを締め出さない。
+/// Claude Code itself reads and writes through this same path, so the item's access settings
+/// always keep `/usr/bin/security` (partition `apple-tool:`). Touching it directly through the
+/// Security framework would swap the partition to the writer on every write, locking the other
+/// side out and forcing it to prompt for the login password on every access. Using the same
+/// tool means neither side locks the other out, whichever one writes.
 enum KeychainTool {
     static let executable = URL(fileURLWithPath: "/usr/bin/security")
 
-    /// 許可ダイアログが出た場合はその応答までここで待つ。無応答なら拒否として扱う。
+    /// If a permission dialog appears, this waits here for its response. No response is treated as a denial.
     static let timeout: TimeInterval = 60
 
-    /// `security -i` の1行は約4KBまで。超えた行は途中で切られ、前半だけが実行されて
-    /// 切り詰めた値が保存される（実測）。境界に寄せず、余裕を取って抑える。
+    /// A single `security -i` line maxes out at about 4KB. A longer line gets cut off mid-way, and only
+    /// the first part executes, saving a truncated value (observed empirically). Kept well under the limit rather than right at it.
     static let interactiveLineLimit = 4_000
 
     struct Invocation: Equatable {
@@ -30,11 +30,11 @@ enum KeychainTool {
         )
     }
 
-    /// 値は標準入力の対話モードで渡し、他プロセスから見える引数に載せない。
+    /// Passes the value through standard input in interactive mode, keeping it off arguments visible to other processes.
     ///
-    /// 1行に収まらない場合だけ引数で渡す（Claude Codeも同じ）。引数が見えるのは
-    /// 同じ利用者のプロセスに限られ、それらはこの道具で既に値を読めるため、
-    /// 見える範囲は広がらない。
+    /// Only passed as an argument when it doesn't fit on one line (same as Claude Code). Arguments
+    /// are visible only to processes of the same user, and those can already read the value through
+    /// this same tool, so this doesn't widen what's exposed.
     static func writeInvocation(_ data: Data, service: String, account: String) -> Invocation {
         let hex = data.map { String(format: "%02x", $0) }.joined()
         if isSafeInteractiveToken(account), isSafeInteractiveToken(service) {
@@ -49,12 +49,12 @@ enum KeychainTool {
         )
     }
 
-    /// 対話モードの行は二重引用符で区切るので、区切りを崩す文字は通さない。
+    /// Interactive-mode lines are delimited by double quotes, so characters that would break the delimiter aren't allowed through.
     private static func isSafeInteractiveToken(_ text: String) -> Bool {
         !text.isEmpty && !text.contains { "\"\\\n\r".contains($0) }
     }
 
-    /// 読み取り。成功時は項目の値を返す。
+    /// Reads. Returns the item's value on success.
     static func read(service: String, account: String) -> (OSStatus, Data?) {
         let (status, output) = run(readInvocation(service: service, account: account))
         guard status == errSecSuccess else { return (status, nil) }
@@ -65,7 +65,7 @@ enum KeychainTool {
         run(writeInvocation(data, service: service, account: account)).status
     }
 
-    /// `-w` の出力。ASCII以外を含む値は16進で出てくる（実測）。
+    /// `-w`'s output. A value containing non-ASCII comes out hex-encoded (observed empirically).
     static func decodePasswordOutput(_ output: Data) -> Data {
         var trimmed = output
         while let last = trimmed.last, last == 0x0A || last == 0x0D { trimmed.removeLast() }
@@ -97,7 +97,7 @@ enum KeychainTool {
         return Data(bytes)
     }
 
-    /// 終了コードはOSStatusの下位8bit（項目なしの -25300 は 44 になる）。
+    /// The exit code is OSStatus's low 8 bits (item-not-found -25300 becomes 44).
     static func status(forExitCode code: Int32) -> OSStatus {
         guard code != 0 else { return errSecSuccess }
         let known: [OSStatus] = [
@@ -106,7 +106,7 @@ enum KeychainTool {
         return known.first { Int32(UInt32(bitPattern: $0) & 0xFF) == code } ?? errSecNotAvailable
     }
 
-    /// 相手が先に終了した直後の書き込みで、アプリごと落とされないようにする。
+    /// Prevents the whole app from being killed by a write right after the other end exits.
     private static let ignoreBrokenPipe: Void = { signal(SIGPIPE, SIG_IGN) }()
 
     private static func run(_ invocation: Invocation) -> (status: OSStatus, output: Data) {
@@ -138,7 +138,7 @@ enum KeychainTool {
         let data = output.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
 
-        // 応答の無いダイアログを閉じた場合も拒否と同じに扱い、自動では聞き直さない。
+        // Closing a dialog that got no response is also treated as a denial, and never auto-retried.
         if timedOut.isSet { return (errSecInteractionNotAllowed, Data()) }
         return (status(forExitCode: process.terminationStatus), data)
     }

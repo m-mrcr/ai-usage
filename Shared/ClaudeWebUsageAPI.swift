@@ -1,18 +1,18 @@
 import Foundation
 
-/// claude.ai の組織エンドポイントから使用量を読む。
+/// Reads usage from claude.ai's organization endpoint.
 ///
-/// Claude Code の OAuth 資格情報が無い環境（デスクトップ版アプリだけを使っている場合）
-/// のための任意経路。公開APIではないため、`ClaudeUsageAPI` が資格情報を得られない
-/// ときにだけ使い、既定の経路にはしない。
+/// An optional route for environments with no Claude Code OAuth credentials (using only the
+/// desktop app). Since this isn't a public API, it's used only when `ClaudeUsageAPI` can't get
+/// credentials, and is never the default route.
 ///
-/// 返る本体は `/api/oauth/usage` と同じ形（`five_hour` / `seven_day` / `seven_day_opus`）
-/// なので、復号は `ClaudeUsageAPI.Payload` をそのまま使う。
+/// The returned body has the same shape as `/api/oauth/usage` (`five_hour` / `seven_day` /
+/// `seven_day_opus`), so decoding reuses `ClaudeUsageAPI.Payload` directly.
 enum ClaudeWebUsageAPI {
     enum Failure: Sendable {
         case unauthorized
         case rateLimited(retryAt: Date?)
-        /// Cloudflareのボット検証など、認証の可否を答えていない応答。
+        /// A response that doesn't answer whether auth succeeded, e.g. a Cloudflare bot challenge.
         case challenged
         case organizationUnknown
         case networkOrServer
@@ -48,10 +48,10 @@ enum ClaudeWebUsageAPI {
         }
     }
 
-    // MARK: - 組織ID
+    // MARK: - Organization ID
 
-    /// まず `~/.claude.json` を見る。Claudeへログイン済みなら組織IDが入っているので、
-    /// 余計な問い合わせをせずに済む。無ければ組織一覧から引く。
+    /// Checks `~/.claude.json` first. If already signed in to Claude, it has the organization ID,
+    /// avoiding an extra request. Otherwise, pull it from the organization list.
     static func organizationID(sessionKey: String) async -> String? {
         if let local = localOrganizationID() { return local }
 
@@ -73,8 +73,8 @@ enum ClaudeWebUsageAPI {
         return uuid
     }
 
-    /// 契約プラン。claude.ai 経路では応答に含まれないため、ログイン済みの記録から拾う。
-    /// `claude_pro` のような識別子で入っているので、表示名への変換は `PlanLabel` に任せる。
+    /// The subscription plan. Not included in the claude.ai route's response, so this pulls it from the sign-in record.
+    /// It comes in as an identifier like `claude_pro`, so converting it to a display name is left to `PlanLabel`.
     static func localPlan() -> String? {
         localAccount()?["organizationType"] as? String
     }
@@ -91,7 +91,7 @@ enum ClaudeWebUsageAPI {
         return root["oauthAccount"] as? [String: Any]
     }
 
-    /// UUIDだけを通す。URLへ差し込む値なので経路を書き換えられないようにする。
+    /// Allows only a UUID through. Since this value is spliced into a URL, this prevents the path from being rewritten.
     static func isSafeIdentifier(_ value: String) -> Bool {
         guard (8...64).contains(value.count) else { return false }
         return value.unicodeScalars.allSatisfy { scalar in
@@ -104,7 +104,7 @@ enum ClaudeWebUsageAPI {
         }
     }
 
-    // MARK: - 通信
+    // MARK: - Requests
 
     private enum Response {
         case body(Data)
@@ -129,7 +129,7 @@ enum ClaudeWebUsageAPI {
             switch http.statusCode {
             case 200:
                 guard data.count <= maximumResponseBytes else { return .failure(.networkOrServer) }
-                // ボット検証はHTMLを200で返すことがある。JSONでなければ認証の可否は不明。
+                // A bot challenge can return HTML with a 200 status. If it's not JSON, whether auth succeeded is unknown.
                 guard data.first == UInt8(ascii: "{") || data.first == UInt8(ascii: "[")
                 else { return .failure(.challenged) }
                 return .body(data)

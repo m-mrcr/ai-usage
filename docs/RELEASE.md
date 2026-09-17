@@ -1,12 +1,12 @@
-# リリース手順
+# Release process
 
-App Store外でDeveloper IDによる直接配布を行う。通常のリリースはアプリとDMGを公証し、
-両方にチケットをステープルしてからGatekeeper判定まで確認する。
+Distribute directly with a Developer ID, outside the App Store. A normal release notarizes the app and DMG,
+staples a ticket to both, and confirms the Gatekeeper verdict.
 
-正規の紹介ページは `https://moritouch.com/ai-usage`、Sparkle feedは
-`https://moritouch.com/ai-usage/appcast.xml` とし、moritouchのCloudflare配信を正本にする。
-公開GitHub Releaseはsource、同じDMGとSHA-256、固定tag、immutable attestationの配布証跡として使う。
-一般利用者向けの正規download、appcast、MIT LicenseはCloudflare Workers Static Assetsから配信する。
+The canonical landing page is `https://moritouch.com/ai-usage`, and the Sparkle feed is
+`https://moritouch.com/ai-usage/appcast.xml`; moritouch's Cloudflare delivery is the source of truth.
+The public GitHub Release is used as distribution provenance for the source, the same DMG and SHA-256, a fixed tag, and immutable attestation.
+The canonical download, appcast, and MIT License for general users are served from Cloudflare Workers Static Assets.
 
 ```bash
 ./scripts/bootstrap-release-tools.sh
@@ -16,38 +16,38 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/release.sh --
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/release.sh
 ```
 
-`DEVELOPER_DIR`にはstable Xcodeの`Contents/Developer`を指定する。通常の公証済みreleaseでは、
-実効Xcode.appに`BetaVersion.plist`があるbeta distributionをpreflightで拒否する。
-`xcode-select`がbetaを向いていても、この環境変数を付けた`xcrun`/`xcodebuild`の実効pathを検証し、
-release記録にも同じDeveloper directory、Xcode.app、release channelを保存する。
+`DEVELOPER_DIR` should point to a stable Xcode's `Contents/Developer`. For a normal notarized release,
+preflight rejects a beta distribution where the effective Xcode.app has a `BetaVersion.plist`.
+Even if `xcode-select` points to a beta, this environment variable verifies the effective path of `xcrun`/`xcodebuild`,
+and the same Developer directory, Xcode.app, and release channel are saved to the release record.
 
-正規成果物は `dist/AIUsage-<version>.dmg`、公開用ハッシュは同名の `.sha256`。
-DMGには `AI Usage.app` と `/Applications` へのシンボリックリンクが入り、Finderを開くと
-アイコン表示、固定位置、ドラッグ矢印、初回設定の日英案内が表示される。
-同じversionの成果物が既にある場合は上書きせず停止するので、version/buildを上げるか
-既存成果物を安全な場所へ退避する。releaseと固定toolchain準備は共通lockで直列化され、
-別processが実行中なら開始しない。DMGはrun固有のworking pathで作成し、レイアウト、署名、公証、
-Gatekeeper、同梱アプリをすべて検証したあとだけ`dist/`へ配置する。
+The canonical artifact is `dist/AIUsage-<version>.dmg`, and its public hash is the same-named `.sha256`.
+The DMG contains `AI Usage.app` and a symlink to `/Applications`; opening it in Finder shows
+the icon layout, fixed positions, a drag arrow, and a bilingual first-launch guide.
+If an artifact for the same version already exists, the script stops instead of overwriting it, so bump the version/build or
+move the existing artifact somewhere safe. Release and fixed-toolchain preparation are serialized with a shared lock, and
+it will not start if another process is running. The DMG is built in a run-specific working path, and only placed
+into `dist/` after the layout, signing, notarization, Gatekeeper verdict, and bundled app have all been verified.
 
-## 初回だけ必要な準備
+## One-time setup
 
-配布に使うApple DeveloperチームのTeam IDは `WTKUV8PPM7`。秘密鍵、App用パスワード、
-公証資格情報をリポジトリ、チャット、CIログへ置かない。
+The Team ID for the Apple Developer team used for distribution is `WTKUV8PPM7`. Do not put private keys, app-specific
+passwords, or notarization credentials in the repository, chat, or CI logs.
 
-### 1. Developer ID Application証明書を作る
+### 1. Create a Developer ID Application certificate
 
-通常のローカルDeveloper ID証明書を新規作成できるのは原則としてAccount Holder。
-Adminを使う場合は、Apple側でcloud-managed Developer ID certificate accessが明示的に
-付与された運用と混同しないこと。
+Creating a new local Developer ID certificate can normally only be done by the Account Holder.
+If using an Admin, don't confuse this with a setup where Apple has explicitly granted
+cloud-managed Developer ID certificate access.
 
-Xcode > Settings > Accounts > 配布用Apple Developerチーム > Manage Certificates >
-左下の `+` > **Developer ID Application** から作成する。
+Create it from Xcode > Settings > Accounts > the distribution Apple Developer team > Manage Certificates >
+the `+` in the bottom left > **Developer ID Application**.
 
-別の署名担当者から `.p12` を受け取る必要がある場合は、強い一時パスフレーズと
-承認済みの安全な経路を使う。リポジトリ外で受け渡し、Keychainへのimport後は受渡し用
-ファイルを残さない。漏えいが疑われる場合は使用を止め、Account HolderとAppleへ連絡する。
+If you need to receive a `.p12` from another signer, use a strong, temporary passphrase and
+an approved secure channel. Hand it off outside the repository, and don't leave the transfer
+file behind after importing it into Keychain. If a leak is suspected, stop using it and contact the Account Holder and Apple.
 
-Team IDまで含めて確認する:
+Verify it, including the Team ID:
 
 ```bash
 security find-identity -v -p codesigning \
@@ -55,16 +55,16 @@ security find-identity -v -p codesigning \
   | grep "(WTKUV8PPM7)"
 ```
 
-### 2. App用パスワードを発行する
+### 2. Issue an app-specific password
 
-appleid.apple.com > サインインとセキュリティ > App用パスワード > 新規発行。
-名前は「AIUsage notarization」など用途が分かるものにする。Apple IDの通常パスワードは
-使用しない。
+From appleid.apple.com > Sign-In and Security > App-Specific Passwords > generate new.
+Give it a name that identifies its purpose, such as "AIUsage notarization". Do not use your
+regular Apple ID password.
 
-### 3. 公証資格情報をKeychainへ保存する
+### 3. Store notarization credentials in Keychain
 
-`--password` をコマンド行へ書くとshell historyやprocess listへ残り得る。
-省略して、`notarytool` の安全な対話プロンプトでApp用パスワードを入力する。
+Writing `--password` on the command line can leave it in shell history or the process list.
+Omit it and enter the app-specific password at `notarytool`'s secure interactive prompt instead.
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -73,26 +73,26 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   --team-id WTKUV8PPM7
 ```
 
-資格情報はKeychainへ保存され、release scriptはprofile名だけを参照する。
-別profileを使う場合は `NOTARY_PROFILE` を指定する。
+The credentials are stored in Keychain, and the release script only references the profile name.
+To use a different profile, specify `NOTARY_PROFILE`.
 
-### 4. 固定DMG toolchainを準備する
+### 4. Prepare the fixed DMG toolchain
 
-DMGのFinderレイアウトは`dmgbuild`で生成する。依存versionと配布ファイルのhashは
-`packaging/dmg/requirements.txt`へ固定してあり、release中にはinstallしない。初回またはlock更新後に
-次を実行し、Git管理外の`build/release-tools/venv`へ準備する。
+The DMG's Finder layout is generated with `dmgbuild`. Dependency versions and distribution file hashes are pinned
+in `packaging/dmg/requirements.txt` and are not installed during a release. Run the following once, or after a lockfile update,
+to prepare them into `build/release-tools/venv`, which is outside Git.
 
 ```bash
 ./scripts/bootstrap-release-tools.sh
 ```
 
-bootstrapはwheel由来のinstalled file hashを検証し、requirements hash、Python、各packageの実測versionを
-`build/release-tools/toolchain-stamp.txt`へ保存する。preflightとDMG生成直前・直後に同じ内容を再検証する。
+The bootstrap verifies installed file hashes from the wheels, and saves the requirements hash, Python, and each package's measured version to
+`build/release-tools/toolchain-stamp.txt`. The same content is re-verified during preflight and immediately before/after DMG generation.
 
-### 5. 固定Sparkle toolchainと署名鍵を確認する
+### 5. Verify the fixed Sparkle toolchain and signing key
 
-公式配布のSparkle `2.9.6` toolsを固定SHA-256で検証し、Git管理外の
-`build/sparkle-tools/2.9.6/bin/`へ準備する。
+The official distribution's Sparkle `2.9.6` tools are verified against a fixed SHA-256 and prepared into
+`build/sparkle-tools/2.9.6/bin/`, which is outside Git.
 
 ```bash
 ./scripts/bootstrap-sparkle-tools.sh
@@ -100,52 +100,52 @@ build/sparkle-tools/2.9.6/bin/generate_keys \
   --account jp.co.forestx.aiusage -p
 ```
 
-秘密鍵はlogin Keychainのaccount `jp.co.forestx.aiusage`にだけ保持する。`-p`は既存鍵の公開鍵を
-表示するだけであり、その値が`App/Info.plist`の`SUPublicEDKey`と一致することを確認する。
-既存鍵が見つからない場合は勝手に再生成せず、署名鍵の管理担当者へ確認する。秘密鍵をrepository、
-release asset、Cloudflare環境変数、CI secretへ置かない。
+The private key is kept only in the login Keychain under the account `jp.co.forestx.aiusage`. `-p` only
+displays the public key of the existing key; verify that value matches `SUPublicEDKey` in `App/Info.plist`.
+If no existing key is found, do not regenerate one on your own — check with whoever manages the signing key. Do not put the private key in the
+repository, release assets, Cloudflare environment variables, or CI secrets.
 
-### 6. preflightを通す
+### 6. Pass preflight
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/release.sh --check
 ```
 
-preflightはstable Xcode/XcodeGen、固定versionの`dmgbuild`と各種配布コマンド、
-Team IDが一致するDeveloper ID証明書、
-公証profile、リポジトリ内の秘密鍵、同version成果物の衝突を検査する。さらにproject root自体が
-Git repository rootで、有効な40桁のHEAD commitがあり、未commit・未追跡ファイルを含めworktreeが
-cleanであることを必須にする。通常の`--check`と公証済みreleaseはGit情報が取得不能またはdirtyなら
-失敗する。公証なしローカル検証だけは警告して継続できるが、その成果物は配布しない。
-公証profileの検証はAppleへの読み取りリクエストを伴うため、資格情報の不備とネットワーク障害の
-双方を確認する。
+Preflight checks the stable Xcode/XcodeGen, the pinned version of `dmgbuild` and various distribution commands,
+a Developer ID certificate matching the Team ID,
+the notarization profile, private keys inside the repository, and collisions with same-version artifacts. It also requires that the
+project root itself be a Git repository root, have a valid 40-character HEAD commit, and that the worktree be
+clean, including no uncommitted or untracked files. Both a normal `--check` and a notarized release fail if Git information
+cannot be retrieved or is dirty. Only an un-notarized local verification can proceed with a warning, but that artifact must not be distributed.
+Because verifying the notarization profile involves a read request to Apple, check for both credential problems and
+network failures.
 
-`build/release.lock`が残って停止した場合は、releaseまたはbootstrapのprocessが本当に動いていないことを
-確認する。異常終了で残った空directoryだと確認できた場合に限り、`rmdir build/release.lock`で解除する。
+If a leftover `build/release.lock` stops things, confirm that no release or bootstrap process is actually running.
+Only once you've confirmed it's an empty directory left over from an abnormal exit should you clear it with `rmdir build/release.lock`.
 
-このscriptはApp ID、App Group、capabilityをApple Developer側へ自動登録しない。
-署名担当者は、必要なidentifier/capabilityがApple Developer側の設定と一致すること、および
-export後のアプリとWidgetに期待するentitlementsが含まれることをリリースごとに確認する。
-新しいMacではXcodeへのサインインやローカル署名資産の準備も別途必要になる場合がある。
+This script does not automatically register App IDs, App Groups, or capabilities with Apple Developer. The
+signer must confirm, for every release, that the required identifiers/capabilities match the Apple Developer configuration,
+and that the exported app and Widget include the expected entitlements.
+On a new Mac, signing in to Xcode and preparing local signing assets may also be needed separately.
 
-## 配布物を作る
+## Build the distributable
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./scripts/release.sh
 ```
 
-成功時に次を出力する。
+On success, it outputs:
 
 - `dist/AIUsage-<version>.dmg`
 - `dist/AIUsage-<version>.dmg.sha256`
-- release記録の `provenance.json` とそのSHA-256
-- アプリ/DMGそれぞれの公証response、submission ID、公証log
-- ソースファイルmanifest、Xcode/XcodeGen/SDK、証明書fingerprint、build/export log
-- Git commit由来のDMG設定・背景renderer snapshot、固定toolchain stampと実測version
-- アプリ/Widgetのexported entitlements、dSYMと各file manifest、xcarchiveの`Info.plist`
+- the release record's `provenance.json` and its SHA-256
+- the notarization response, submission ID, and notarization log for both the app and DMG
+- the source file manifest, Xcode/XcodeGen/SDK, certificate fingerprint, and build/export logs
+- Git-commit-derived DMG configuration and background renderer snapshot, the fixed toolchain stamp, and measured versions
+- the exported entitlements for the app/Widget, dSYMs and per-file manifests, and the xcarchive's `Info.plist`
 
-release記録の既定保存先は `build/release-records/<run-id>/`。長期保管が必要な本番運用では、
-アクセス制御されたリポジトリ外の絶対パスを指定する。
+The default save location for release records is `build/release-records/<run-id>/`. For production operation requiring
+long-term retention, specify an access-controlled absolute path outside the repository.
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
@@ -153,61 +153,61 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   ./scripts/release.sh
 ```
 
-公証が失敗または中断した場合、`provenance.json` の `submissionId` とstatusを確認する。
-Apple側でAccepted済みか不明なままscript全体を再実行して重複submitしない。
-記録されたIDを使って `notarytool info` / `notarytool log` で照合してから再開方針を決める。
+If notarization fails or is interrupted, check the `submissionId` and status in `provenance.json`.
+Don't re-run the entire script and submit a duplicate while it's unclear whether Apple already accepted it.
+Use the recorded ID to cross-check with `notarytool info` / `notarytool log` before deciding how to proceed.
 
-配布前に、最終DMGのSHA-256、`spctl`、`stapler validate`、DMG内アプリのbundle ID、
-version/build、Team IDがrelease記録と一致することをrelease operatorが再確認する。複数のmaintainerが
-いる場合は署名担当者と承認者を分け、個人運用では同じownerが別の確認工程として記録する。
-さらにFinderから最終DMGを通常どおり開き、アイコン表示、案内背景、`AI Usage.app`と`Applications`の
-位置、ドラッグ矢印、日英の初回設定案内が読めることを実画面で確認する。Finderを既存タブで開く設定や
-隠し項目表示は周囲の余白・項目を変えるため、DMGが指定する800×500の内容領域を基準に確認する。
-隠し項目表示が有効な場合も、背景素材の`.background.png`がこの内容領域へ現れないことを確認する。
+Before distribution, the release operator should re-confirm that the final DMG's SHA-256, `spctl`, `stapler validate`, the bundle ID of the app inside the DMG,
+the version/build, and the Team ID all match the release record. If there are multiple maintainers,
+separate the signer and approver roles; for a solo operator, the same owner should record it as a separate verification step.
+Also open the final DMG normally from Finder and visually confirm on screen that the icon layout, guide background, the positions of `AI Usage.app` and `Applications`,
+the drag arrow, and the bilingual first-launch guide are all legible. Since Finder's "open folders in new tabs" setting and
+showing hidden items change the surrounding margins/items, verify against the DMG's specified 800×500 content area as the baseline.
+Even with hidden items shown, confirm that the background asset `.background.png` does not appear within this content area.
 
-## 公開GitHub Releaseで成果物を確定する
+## Finalize artifacts with a public GitHub Release
 
-Git worktree、公開GitHub repository、remote、default branchのどれかが未準備ならRelease作業を開始しない。
-この手順と`.github/workflows/release.yml`をdefault branchへ取り込み、remote上のcommitとCIを確認してから進む。
-workflow内のrepository名やdefault branchは、固定値ではなく実際のrepository contextから取得する。
+Do not start release work unless the Git worktree, the public GitHub repository, the remote, and the default branch are all ready.
+Bring this procedure and `.github/workflows/release.yml` into the default branch, and confirm the commit and CI on the remote before proceeding.
+The repository name and default branch inside the workflow are fetched from the actual repository context, not hardcoded.
 
-Apple署名・公証の正本は管理下Macで実行する`./scripts/release.sh`である。Developer ID秘密鍵、`.p8`、
-App用パスワード、notary profileをGitHub Actionsのrepository/environment secretへ登録しない。
-`release.yml`は`workflow_dispatch`だけを受け付ける。GitHubがDraft Releaseをpush権限のあるtokenにだけ
-公開するため、2つのjobには短命な`GITHUB_TOKEN`の`contents: write`が必要になる。最初のjobはGETだけで
-Draftを検査する。承認後のjobもrepositoryをcheckoutせず再検査し、最後にReleaseの`draft`を`false`へ
-変えるPATCHを1回だけ実行する。Draft作成、asset upload、Apple署名・公証はworkflowで行わない。
+The source of truth for Apple signing and notarization is `./scripts/release.sh`, run on a managed Mac. Do not register the Developer ID private key, `.p8`,
+app-specific password, or notary profile as GitHub Actions repository/environment secrets.
+`release.yml` only accepts `workflow_dispatch`. Because GitHub only publishes a Draft Release to a token with push permission,
+both jobs need a short-lived `GITHUB_TOKEN` with `contents: write`. The first job only inspects the
+Draft with GET requests. The post-approval job also re-inspects without checking out the repository, and finally performs a single
+PATCH that changes the Release's `draft` to `false`. The workflow does not create the Draft, upload assets, or perform Apple signing/notarization.
 
-### 初回のGitHub設定
+### Initial GitHub setup
 
-1. repository rootへMITの`LICENSE`を置き、履歴と配布対象に秘密情報や個人固有値がないことを確認する。
-2. default branchと`v*` tagをrulesetまたはbranch/tag protectionで保護する。tagを再利用せず、
-   CI、annotated tag、Release承認を必須にする。
-3. Repository SettingsのReleasesで**release immutability**を有効にする。これは有効化後にPublishする
-   Releaseだけへ適用されるため、最初のPublish前に設定する。
-4. `release-publish` Environmentを作り、required reviewerを設定する。個人運用で同じownerが起動と承認を
-   行う場合はself-reviewを許可する。release immutabilityを確認してworkflowの`publish` checkboxを入れ、
-   Environmentでも承認することで2回の明示確認にする。
-   別のmaintainerを追加した場合はPrevent self-reviewを有効にして役割を分離する。
-5. ActionsへApple関連secretを作らない。Draft閲覧とPublishだけにjob-level `contents: write`を与え、
-   repositoryをcheckoutせず、外部Actionも使わない。
-6. Dependabot alerts、secret scanning、push protection、Private Vulnerability Reportingを有効にする。
-7. GitHub Pagesを過去に公開していた場合はSettings > Pagesからunpublishし、Cloudflareの紹介ページと
-   appcastだけを正規配信面にする。
+1. Place an MIT `LICENSE` at the repository root, and confirm the history and distributed artifacts contain no secrets or personally identifying values.
+2. Protect the default branch and `v*` tags with a ruleset or branch/tag protection. Don't reuse tags, and
+   require CI, annotated tags, and Release approval.
+3. Enable **release immutability** under Releases in Repository Settings. This only applies to Releases published
+   after it's enabled, so set it before the first Publish.
+4. Create a `release-publish` Environment and configure a required reviewer. For a solo operator where the same owner
+   both triggers and approves, allow self-review. After confirming release immutability, check the workflow's `publish` checkbox and
+   also approve in the Environment, making it two explicit confirmations.
+   If another maintainer is added, enable "Prevent self-review" to separate the roles.
+5. Do not create Apple-related secrets in Actions. Grant job-level `contents: write` only for viewing the Draft and Publishing,
+   don't check out the repository, and don't use external Actions.
+6. Enable Dependabot alerts, secret scanning, push protection, and Private Vulnerability Reporting.
+7. If GitHub Pages was previously published, unpublish it from Settings > Pages, so the canonical distribution surfaces are only
+   Cloudflare's landing page and appcast.
 
-通常の`GITHUB_TOKEN`にはrepository administrationのread権限を追加できないため、workflowからrelease
-immutability設定そのものは照会しない。広い長期PATをActionsへ保存する代わりに、起動時の`publish`
-checkboxとEnvironment承認時にownerが設定を確認する。Publish jobは公開後のReleaseが実際に
-`immutable=true`であることとattestationを必ず検証する。
+Because the standard `GITHUB_TOKEN` cannot be granted read access to repository administration, the workflow does not itself query the
+release immutability setting. Instead of storing a broad, long-lived PAT in Actions, the owner confirms the setting at
+launch time via the `publish` checkbox and at Environment approval time. The publish job always verifies that the published Release actually has
+`immutable=true` and checks the attestation.
 
-GitHubのimmutable releaseはPublish後のtag移動・削除とasset変更・削除を防ぎ、確定時のtag、commit、
-assetsに対するattestationを生成する。これはGitHub上の公開成果物集合の証跡であり、管理下MacでのApple
-build provenanceの代替ではない。DraftはPublish前なら変更可能なので、asset検査をすべて終えてからPublishする。
+GitHub's immutable release prevents moving/deleting the tag and changing/deleting assets after Publish, and generates
+attestation for the finalized tag, commit, and assets. This is provenance for the set of public artifacts on GitHub, and is not a
+substitute for Apple build provenance on the managed Mac. A Draft can still be changed before Publish, so finish all asset inspection before Publishing.
 
-### 1. 管理下Macで正規成果物を作る
+### 1. Build canonical artifacts on the managed Mac
 
-version変更をdefault branchへcommit/pushし、手元がcleanでそのcommitがdefault branch履歴上にあることを
-確認する。ビルド後の`provenance.json`はアクセス制御された非公開保管先だけに残す。
+Commit/push the version change to the default branch, and confirm the working tree is clean and that commit is
+in the default branch history.
 
 ```bash
 set -euo pipefail
@@ -223,14 +223,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   ./scripts/release.sh
 ```
 
-scriptが表示した非公開`provenance.json`について、`source.gitState`が`clean`、`source.gitCommit`が
-`git rev-parse HEAD`、公証statusがアプリ/DMGとも`Accepted`であることを確認する。個人の絶対パス、
-submission ID、公証response/log、dSYM、entitlements、xcarchive、notary用zipをGitHubへuploadしない。
+Keep the built `provenance.json` only in an access-controlled private location.
 
-### 2. tagを固定してDraftを作る
+For the private `provenance.json` the script displays, confirm that `source.gitState` is `clean`, `source.gitCommit` matches
+`git rev-parse HEAD`, and notarization status is `Accepted` for both the app and DMG. Do not upload personal absolute paths,
+submission IDs, notarization responses/logs, dSYMs, entitlements, xcarchives, or the notary zip to GitHub.
 
-既存tagは移動・再利用しない。annotated tagを成果物のsource commitへ作成してpushしたあと、
-Release assetを明示した2ファイルだけに限定してDraftを作る。globは使わない。
+### 2. Pin the tag and create the Draft
+
+Do not move or reuse an existing tag. After creating and pushing an annotated tag against the artifact's source commit,
+create the Draft limited to exactly two explicitly named Release assets. Do not use globs.
 
 ```bash
 set -euo pipefail
@@ -256,15 +258,14 @@ gh release create "$TAG" \
   "$CHECKSUM"
 ```
 
-Draftのrelease noteはrepositoryへのwrite権限を持つユーザーだけが閲覧できるが、Publish後は一般公開される。
-`/Users/...`などの個人パス、submission ID、`provenance.json`や非公開logの内容がないことを
-upload前に確認する。
+The Draft's release notes are visible only to users with write access to the repository, but become fully public after Publish.
+Before upload, confirm there are no personal paths like `/Users/...`, submission IDs, or contents of `provenance.json` or private logs.
 
-### 3. Draftを検査し、Actions上で承認してPublishする
+### 3. Inspect the Draft, approve in Actions, and Publish
 
-workflowはdefault branchからだけ起動する。tagがannotated tagでdefault branch履歴上にあること、tagと
-`MARKETING_VERSION`の一致、非prereleaseのDraftであること、assetがDMGと`.sha256`の2つだけであること、
-SHA-256とGitHub側digestを最初のjobで検査する。`publish=true`の場合も、検査が成功するまで承認待ちへ進まない。
+The workflow can only be triggered from the default branch. The first job checks that the tag is an annotated tag on the default branch history, that the tag
+matches `MARKETING_VERSION`, that the Draft is not a prerelease, that there are exactly two assets — the DMG and `.sha256` —
+and that the SHA-256 matches the GitHub-side digest. Even with `publish=true`, it does not proceed to the approval wait until these checks pass.
 
 ```bash
 gh workflow run release.yml \
@@ -273,24 +274,24 @@ gh workflow run release.yml \
   -f publish=true
 ```
 
-Actions画面で`Validate draft metadata and release assets`が成功すると、`release-publish` Environmentの
-承認待ちになる。承認者は次を再確認する。
+Once `Validate draft metadata and release assets` succeeds in the Actions view, it waits for approval on the `release-publish` Environment.
+The approver should re-confirm:
 
-- tagのcommitと非公開provenanceのcommitが一致する
-- 対象commitのCIが成功している
-- release noteに内部情報がない
-- 添付assetが`AIUsage-<version>.dmg`と同名`.sha256`だけである
-- ローカルとDraftからdownloadしたDMGのSHA-256が一致する
-- Repository Settingsでrelease immutabilityが有効なままである
+- the tag's commit matches the commit in the private provenance
+- CI for the target commit succeeded
+- the release notes contain no internal information
+- the attached assets are exactly `AIUsage-<version>.dmg` and the same-named `.sha256`
+- the SHA-256 of the local DMG matches the one downloaded from the Draft
+- release immutability is still enabled in Repository Settings
 
-workflow runの**Review deployments**から`release-publish`を選び、**Approve and deploy**を押す。
-承認後のjobはtag、Draft metadata、asset ID・名前・サイズ・digest、downloadしたDMGのSHA-256をもう一度
-検査する。最初の検査後に内容が変わっていればPublishせず停止し、一致した場合だけDraftをPublishする。
-Publish後は`immutable=true`とGitHub release attestation、両assetのattestationまで検証する。
-成功runを再実行せず、やり直す場合は新しい`workflow_dispatch`として開始する。
+Select `release-publish` from **Review deployments** on the workflow run and press **Approve and deploy**.
+The post-approval job re-checks the tag, Draft metadata, the asset ID/name/size/digest, and the SHA-256 of the downloaded DMG once more.
+If anything changed since the first check, it stops without publishing; only if everything matches does it Publish the Draft.
+After Publish, it also verifies `immutable=true`, the GitHub release attestation, and attestation for both assets.
+Do not re-run a successful run; to redo it, start a new `workflow_dispatch`.
 
-公開Releaseとassetは一般利用者もGitHubから取得できる。アプリ自身はGitHub APIやReleaseを参照せず、
-GitHub tokenも持たない。Sparkleの正規更新経路は引き続きCloudflare上のappcastと固定version assetである。
+The public Release and assets can also be fetched from GitHub by general users. The app itself never references the GitHub API or Releases, and
+holds no GitHub token. Sparkle's canonical update path remains the appcast on Cloudflare and the fixed-version asset.
 
 ```bash
 gh release view "$TAG" --json tagName,isDraft,isImmutable,assets
@@ -299,14 +300,14 @@ gh release verify-asset "$TAG" "dist/AIUsage-${TAG#v}.dmg"
 gh release verify-asset "$TAG" "dist/AIUsage-${TAG#v}.dmg.sha256"
 ```
 
-GitHubが自動表示するsource archiveを除き、手動添付assetはDMGと`.sha256`だけにする。Publish後は
-`gh release upload --clobber`、asset削除・再upload、tag移動を行わない。誤りや事故があれば既存assetを
-差し替えず、配布停止を告知して新しいversion/build、tag、Draftで修正版を公開する。
+Aside from the source archive GitHub automatically displays, the only manually attached assets should be the DMG and `.sha256`. After Publish,
+do not `gh release upload --clobber`, delete/re-upload assets, or move the tag. If there's a mistake or incident, don't replace the existing
+asset — announce that distribution is paused and publish a fixed version with a new version/build, tag, and Draft.
 
-### 4. 署名済みappcastを生成してCloudflareへ反映する
+### 4. Generate the signed appcast and reflect it to Cloudflare
 
-Draftや変更可能なassetをfeedへ載せない。承認付きworkflowのPublish後に`isDraft=false`、
-`isImmutable=true`とattestationを確認してから、AI Usage repositoryで次を実行する。
+Do not put a Draft or a mutable asset into the feed. After Publish via the approved workflow, confirm `isDraft=false`,
+`isImmutable=true`, and the attestation, then run the following in the AI Usage repository.
 
 ```bash
 set -euo pipefail
@@ -323,31 +324,31 @@ mkdir -p "$PUBLIC_ASSETS_ROOT"
   --output "$PROFILE_REPO/public/ai-usage/appcast.xml"
 ```
 
-`PROFILE_REPO`はmoritouchのCloudflare profile repositoryの絶対パスを指定する。
-`prepare-appcast.sh`はPublish済みnon-prerelease・immutableの公開Release、GitHubとローカル`dist/`に
-あるDMG／`.sha256`、公証・Gatekeeper判定、KeychainのSparkle鍵と`App/Info.plist`の公開鍵を照合する。
-25 MiB未満を確認し、`public/ai-usage/releases/$TAG/`へ2 assetをatomicに配置する。同じtagの既存directoryは
-2 fileがbyte一致する場合だけ再利用し、差し替えを拒否する。既存appcastの履歴を保持し、deltaを生成せず、
-すべての検証に成功した場合だけ出力をatomicに置き換える。出力後にXMLを手編集しない。
+`PROFILE_REPO` should be the absolute path to moritouch's Cloudflare profile repository.
+`prepare-appcast.sh` cross-checks the published, non-prerelease, immutable public Release, the DMG/`.sha256` on both GitHub and the local `dist/`,
+the notarization and Gatekeeper verdict, and the Sparkle key in Keychain against the public key in `App/Info.plist`.
+It confirms the size is under 25 MiB, and atomically places the two assets into `public/ai-usage/releases/$TAG/`. An existing directory for the same tag is
+reused only if the two files are byte-identical; otherwise the replacement is refused. It preserves existing appcast history, does not generate deltas, and
+only atomically replaces the output once all verification succeeds. Do not manually edit the XML after output.
 
-`prepare-appcast.sh`はfeedと公開assetだけを更新する。profile repositoryが持つversion pinは別管理なので、
-続けて`wrangler.jsonc`の`NEXT_PUBLIC_AI_USAGE_LATEST_VERSION`を今回のversionへ上げ、型定義を再生成する。
-これを飛ばすとdeploy前の`verify:ai-usage-release`が
-`build environment NEXT_PUBLIC_AI_USAGE_LATEST_VERSION must match wrangler.jsonc`で停止する
-（deployは開始されないので配信中のfeedには影響しない）。`cloudflare-env.d.ts`は生成物なので手編集しない。
+`prepare-appcast.sh` only updates the feed and public assets. The version pin held by the profile repository is managed separately, so
+next, bump `NEXT_PUBLIC_AI_USAGE_LATEST_VERSION` in `wrangler.jsonc` to this version and regenerate the type definitions.
+Skipping this causes the pre-deploy `verify:ai-usage-release` to fail with
+`build environment NEXT_PUBLIC_AI_USAGE_LATEST_VERSION must match wrangler.jsonc`
+(deploy never starts, so this does not affect the live feed). `cloudflare-env.d.ts` is generated, so do not edit it by hand.
 
 ```bash
 cd "$PROFILE_REPO"
-# wrangler.jsonc の NEXT_PUBLIC_AI_USAGE_LATEST_VERSION を "${TAG#v}" へ更新してから実行する
+# After updating NEXT_PUBLIC_AI_USAGE_LATEST_VERSION in wrangler.jsonc to "${TAG#v}", run:
 pnpm run cf-typegen
 git diff -- wrangler.jsonc cloudflare-env.d.ts
 ```
 
-差分は`wrangler.jsonc`の1行、`cloudflare-env.d.ts`の型リテラルと生成hashの2行だけになる。
+The diff should be only one line in `wrangler.jsonc`, plus two lines — the type literal and generated hash — in `cloudflare-env.d.ts`.
 
-profile repository側の変更内容に、想定したtagのenclosure URLと署名、上記のversion pin以外の差分が
-混ざっていないことをreviewしてcommit/pushし、対象Cloudflare accountが`moritouch`であることを
-確認してdeployする。
+Review that the changes on the profile-repository side contain no diffs other than the expected enclosure URL and signature for the tag and
+the version pin above, then commit/push, confirm the target Cloudflare account is `moritouch`, and
+deploy.
 
 ```bash
 cd "$PROFILE_REPO"
@@ -356,8 +357,8 @@ NEXT_PUBLIC_AI_USAGE_LATEST_VERSION="${TAG#v}" \
   pnpm run deploy
 ```
 
-deploy後は紹介ページ、DMGとSHA-256の直接download導線、Range応答、feedのContent-Typeと署名を
-productionで確認する。download先は検証済みimmutable Releaseとbyte一致する公証済みDMGでなければならない。
+After deploying, verify in production the landing page, the direct download links for the DMG and SHA-256, the Range response, and the feed's Content-Type and
+signature. The download target must be a notarized DMG that is byte-identical to the verified immutable Release.
 
 ```bash
 set -euo pipefail
@@ -388,63 +389,63 @@ curl --fail --show-error --silent \
   --output "$VERIFY_DIR/range.bin"
 ```
 
-feed公開が失敗した場合はimmutable GitHub Releaseのassetを変更せず、直前の正しく署名されたappcastへ戻してから
-Cloudflareを再deployする。新しいDMGが必要な問題は新version/build、tag、Releaseとして修正する。
+If publishing the feed fails, don't change the assets on the immutable GitHub Release — revert to the last correctly signed appcast, then
+redeploy to Cloudflare. Any issue requiring a new DMG should be fixed as a new version/build, tag, and Release.
 
-参考: [GitHubの手動workflow実行](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow)、
-[Immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)、
-[`gh release create`](https://cli.github.com/manual/gh_release_create)、
-[Sparkleの更新公開手順](https://sparkle-project.org/documentation/publishing/)。
+References: [Manually running a workflow on GitHub](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow),
+[Immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases),
+[`gh release create`](https://cli.github.com/manual/gh_release_create),
+[Sparkle's publishing update guide](https://sparkle-project.org/documentation/publishing/).
 
-## 公開・更新・緊急時の運用
+## Release, update, and incident operations
 
-`0.1.10`（build `12`）はSparkleを含む最初の公開bootstrap版である。それ以前の利用者には、
-紹介ページから最新の公証済みDMGを取得し、アプリを終了して`/Applications`の旧版を手動で
-置き換えてもらう。Sparkleを持たない旧版に対してappcastだけで更新を配ることはできない。
-`0.1.10`の配布開始前に、項目が空でも正しく署名されたappcastが固定URLからHTTP 200とXMLで返り、
-`0.1.10`の手動確認がエラーではなく「最新版です」で完了することを確認する。
+`0.1.10` (build `12`) is the first public bootstrap release including Sparkle. For users before that, have them
+get the latest notarized DMG from the landing page, quit the app, and manually replace the old version in `/Applications`.
+There is no way to distribute an update via appcast alone to an old version that doesn't have Sparkle.
+Before starting distribution of `0.1.10`, confirm that a correctly signed appcast — even with no items — returns HTTP 200 and XML at its fixed URL,
+and that a manual check on `0.1.10` completes with "up to date" rather than an error.
 
-最初の実更新E2Eは`0.1.10`をインストールした検証環境から`0.1.11`へ行う。`0.1.11`の
-version/buildを上げ、公証済みDMGを公開immutable GitHub Releaseとして確定し、上記手順でappcastを
-Cloudflareへ反映したあと、設定の「アップデートを確認…」から検出、download、署名検証、置換、
-再起動、version/build、Widgetの再登録まで確認する。`0.1.10`自身の「最新版です」という結果は
-実更新E2Eの代わりにならない。
+The first real update E2E test goes from a verification environment with `0.1.10` installed to `0.1.11`. After bumping `0.1.11`'s
+version/build, finalizing the notarized DMG as a public immutable GitHub Release, and reflecting the appcast to Cloudflare per the procedure above,
+verify from Settings > "Check for Updates…" that detection, download, signature verification, replacement,
+relaunch, version/build, and Widget re-registration all work. `0.1.10`'s own "up to date" result does not substitute for
+a real update E2E test.
 
-以後の利用者は設定から自動確認を有効にするか、手動確認ボタンで更新する。公開前にrelease operatorが、
-release記録、公証status、最終DMGのハッシュ、Gatekeeper判定、release note、appcast enclosureと署名を
-確認し、対象version/buildと承認結果を記録する。複数のmaintainerがいる場合は署名担当者と承認者を分け、
-個人運用では同じownerが二段階で確認する。承認前のDMGや公証なしDMG、
-Draft ReleaseやGitHub Release assetのURLをappcastへ置かない。
+From then on, users either enable automatic checks from Settings or update via the manual check button. Before publishing, the release operator
+should confirm the release record, notarization status, the final DMG's hash, the Gatekeeper verdict, the release notes, and the appcast enclosure and signature,
+and record the target version/build and the approval result. If there are multiple maintainers, separate the signer and approver roles; for a
+solo operator, the same owner should confirm it in two separate steps. Do not put an unapproved DMG, an un-notarized DMG, or a
+Draft Release or GitHub Release asset URL into the appcast.
 
-直前の正常版DMG、`.sha256`、release記録、dSYMはアクセス制御された保管先へimmutableに保持する。
-同名ファイルを差し替えず、保持期限とサポート対象を決める。公開先に旧版を残す場合は、既知の
-脆弱性を含め利用可否を明示する。
+Keep the previous known-good DMG, `.sha256`, release record, and dSYM immutably in an access-controlled storage location.
+Don't overwrite same-named files, and decide a retention period and support window. If an old version is left available for download,
+clearly state its usability, including any known vulnerabilities.
 
-アプリ名は常に`AI Usage.app`とし、退避用のversion/buildはDMGまたはZIPのファイル名に付ける。
-展開済みの`AI Usage-<version>-build<build>.app`を残すと、旧版のWidgetが登録され、
-ギャラリー名に退避用の名前が表示されることがある。旧版は公証済みDMGまたは検証済みZIPで保管し、
-更新後は`/Applications/AI Usage.app`のWidget登録、ギャラリー名が「AI Usage」であること、
-配置済みWidgetに使用量が表示されることを確認する。
+The app name is always `AI Usage.app`; put any version/build used for archival purposes only in the DMG or ZIP filename.
+Leaving an expanded `AI Usage-<version>-build<build>.app` around can cause an old version's Widget to get registered,
+and the archival name may show up in the gallery name. Keep old versions as a notarized DMG or verified ZIP, and after an
+update, confirm the Widget registration for `/Applications/AI Usage.app`, that the gallery name is "AI Usage", and
+that a placed Widget shows usage data.
 
-問題発生時は新versionの配布を停止し、影響範囲とデータ互換性を確認する。rollbackが安全なら、
-保管済みの直前正常版を元のハッシュのまま再案内し、再圧縮・再署名による差し替えはしない。
-利用者へ対象version、回避策、復旧状況を通知し、原因修正は新しいversion/buildとして再リリースする。
+If a problem occurs, stop distributing the new version and assess the scope of impact and data compatibility. If a rollback is safe,
+re-point users to the stored previous known-good version at its original hash, without re-compressing or re-signing it as a replacement.
+Notify users of the affected version, workarounds, and recovery status, and re-release the fix as a new version/build.
 
-Developer ID秘密鍵や公証資格情報の漏えいが疑われる場合は直ちにリリースと配布を停止する。
-Account Holderを含む担当者がApple Developer側で証明書を失効し、App用パスワード、Keychain profile、
-CI等の関連secretを無効化・更新する。署名履歴と公開済みartifactを調査し、信頼できるsourceと新しい
-証明書から再build・再公証する。悪用の可能性がある場合は影響を受ける利用者へ通知する。
+If a leak of the Developer ID private key or notarization credentials is suspected, immediately stop releases and distribution.
+Someone with access, including the Account Holder, should revoke the certificate on Apple Developer, and invalidate/rotate the app-specific password, Keychain profile,
+CI, and any other related secrets. Investigate the signing history and published artifacts, and rebuild/re-notarize from a trusted source and a new
+certificate. If abuse is possible, notify affected users.
 
-## 公証なしの検証用ビルド
+## Un-notarized verification builds
 
-通常リリースの代替ではない。2つの明示引数が揃わない限り実行されず、旧
-`SKIP_NOTARIZE` 環境変数は拒否される。
+Not a substitute for a normal release. It only runs when two explicit arguments are both given; the old
+`SKIP_NOTARIZE` environment variable is rejected.
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer \
   ./scripts/release.sh --unnotarized --confirm-unnotarized
 ```
 
-出力は `dist/unnotarized/AIUsage-<version>-UNNOTARIZED.dmg` に隔離される。
-Gatekeeperで拒否される前提のローカル検証物であり、利用者への配布・公開・正規DMGへの
-改名を行わない。
+The output is isolated at `dist/unnotarized/AIUsage-<version>-UNNOTARIZED.dmg`.
+It's a local verification artifact expected to be rejected by Gatekeeper — do not distribute or publish it to users, or
+rename it to look like a canonical DMG.

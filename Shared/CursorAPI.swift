@@ -1,9 +1,9 @@
 import Foundation
 
-/// cursor.com のダッシュボードAPIへの問い合わせ。Grok Bot と Cursor が共有する。
+/// Requests to cursor.com's dashboard API. Shared by Grok Bot and Cursor.
 ///
-/// 公開されているAPIではない。提供元の変更で壊れる前提で、失敗は素直に
-/// 「取得できない」として扱い、古い値を残さない。
+/// Not a published API. Built on the assumption it can break on a provider-side change, so a
+/// failure is simply treated as "unavailable", without leaving a stale value behind.
 enum CursorAPI {
     enum Outcome: Sendable {
         case body(Data)
@@ -25,14 +25,14 @@ enum CursorAPI {
         request.setValue(cookie, forHTTPHeaderField: "Cookie")
         request.setValue(browserUserAgent, forHTTPHeaderField: "User-Agent")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        // ページから出る要求には自動で付き、CSRF検査がこれを見ている。
-        // 付けないと認証が通っていても403になる。
+        // Automatically attached to requests originating from the page; the CSRF check looks at this.
+        // Without it, even a request with valid auth gets a 403.
         request.setValue("https://cursor.com", forHTTPHeaderField: "Origin")
         request.setValue("https://cursor.com/dashboard", forHTTPHeaderField: "Referer")
         if let token = csrfToken(in: cookie) {
             request.setValue(token, forHTTPHeaderField: "x-csrf-token")
         }
-        // Cookieは手で組み立てて渡す。URLSessionの管理に任せると差し替えられる。
+        // The cookie is built by hand and passed explicitly. Leaving it to URLSession's management would let it be swapped out.
         request.httpShouldHandleCookies = false
         request.timeoutInterval = 15
 
@@ -53,7 +53,7 @@ enum CursorAPI {
         }
     }
 
-    /// double-submit方式のCSRF対策向け。Cookieと同じ値をヘッダにも載せる。
+    /// For double-submit-style CSRF protection. Carries the same value as the cookie in a header too.
     static func csrfToken(in cookie: String) -> String? {
         for pair in cookie.split(separator: ";") {
             let trimmed = pair.trimmingCharacters(in: .whitespaces)
@@ -70,8 +70,8 @@ enum CursorAPI {
         return fractional.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
-    /// ミリ秒エポックが文字列で入ってくる。桁を取り違えると数万年先の日付になるため、
-    /// 妥当な範囲に収まるものだけ通す。
+    /// Comes in as a millisecond epoch, but as a string. A digit mix-up would land tens of thousands of years in the future,
+    /// so only values within a plausible range are allowed through.
     static func parseEpochMilliseconds(_ text: String?) -> Date? {
         guard let text, let milliseconds = Double(text), milliseconds.isFinite else { return nil }
         let date = Date(timeIntervalSince1970: milliseconds / 1_000)

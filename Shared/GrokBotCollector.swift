@@ -1,11 +1,12 @@
 import Foundation
 
-/// Grok Bot の残量。
+/// Grok Bot's remaining allowance.
 ///
-/// Grok Bot は使用量をローカルへ書き残さないため、cursor.com の
-/// `get-sand-usage-status`（`sand` は Grok Bot の内部名）へ問い合わせる。
-/// 認証は利用者がアプリ内でログインして預けた Cookie を使う。
-/// 既存の Grok（CLI）とは別枠で、Grok Bot 自身の画面も「別です」と明記している。
+/// Grok Bot doesn't write usage locally, so this queries cursor.com's
+/// `get-sand-usage-status` (`sand` is Grok Bot's internal name).
+/// Auth uses the cookie the user handed over by signing in inside the app.
+/// This is a separate allowance from the existing Grok (CLI), and Grok Bot's own UI
+/// explicitly states they're separate.
 enum GrokBotCollector {
 
     struct Status: Decodable, Sendable {
@@ -50,13 +51,13 @@ enum GrokBotCollector {
         }
     }
 
-    /// ログインが成立したかを応答で確かめる。Cookie名を決め打ちしないための判定。
+    /// Confirms sign-in succeeded via the response. A check that avoids hardcoding a cookie name.
     static func sessionWorks(cookie: String) async -> Bool {
         if case .status = await fetch(cookie: cookie) { return true }
         return false
     }
 
-    /// アプリが入っていない環境では、設定に案内を出す意味がない。
+    /// There's no point showing guidance in Settings in an environment where the app isn't installed.
     static var installed: Bool {
         FileManager.default.fileExists(atPath: "/Applications/Grok Bot.app")
             || FileManager.default.fileExists(
@@ -82,8 +83,8 @@ enum GrokBotCollector {
             ? reset!.timeIntervalSince(start!)
             : nil
 
-        // 期間の長さは一定ではない（観測では約3.5日）。長さから見出しを作ると
-        // 実態と合わない数字を出してしまうので、既存のGrokと同じく期間として扱う。
+        // The period length isn't fixed (observed at roughly 3.5 days). Building a label from
+        // its length would produce a number that doesn't match reality, so it's treated as a period, same as the existing Grok.
         let window = UsageWindow(
             id: "grokbot_period",
             label: "Period",

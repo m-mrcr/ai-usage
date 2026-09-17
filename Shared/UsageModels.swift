@@ -1,16 +1,16 @@
 import Foundation
 
-/// 一つの制限ウィンドウ（例: Claude の 5 時間枠 / 週枠、Codex の週枠）。
+/// A single limit window (e.g. Claude's 5-hour/weekly window, Codex's weekly window).
 struct UsageWindow: Codable, Hashable, Identifiable {
     var id: String            // "five_hour" / "seven_day" / "primary" ...
-    var label: String         // 画面表示用の短いラベル
+    var label: String         // A short label for on-screen display
     var usedPercent: Double   // 0...100
     var resetsAt: Date?
-    /// 窓の長さ（秒）。5 時間枠かどうかの判定と、消費ペースの計算に使う。
+    /// The window's length in seconds. Used to judge whether it's a 5-hour window and to compute the consumption pace.
     var windowSeconds: TimeInterval?
-    /// プラン全体ではない補助的な枠（例: Codexのモデル別上限）。
-    /// 使っていなければ0%のままなので、見出しや要約がこれを拾うと余裕があると誤読させる。
-    /// 一覧には出すが、代表値の選定からは外す。
+    /// A supplementary window that isn't the plan-wide one (e.g. Codex's per-model limit).
+    /// Stays at 0% if unused, so if the headline or summary picked it up it would misleadingly suggest plenty of room.
+    /// Shown in the list, but excluded from selection as the representative value.
     var isSupplementary: Bool
 
     init(id: String, label: String, usedPercent: Double, resetsAt: Date?,
@@ -44,7 +44,7 @@ struct UsageWindow: Codable, Hashable, Identifiable {
         windowSeconds = Self.validWindowSeconds(
             try values.decodeIfPresent(TimeInterval.self, forKey: .windowSeconds)
         )
-        // 旧snapshotにはこの項目が無い。既定はプラン枠扱い。
+        // An old snapshot doesn't have this field. Defaults to being treated as a plan window.
         isSupplementary = try values.decodeIfPresent(Bool.self, forKey: .isSupplementary) ?? false
     }
 
@@ -72,13 +72,13 @@ struct UsageWindow: Codable, Hashable, Identifiable {
 
     var remainingPercent: Double { max(0, min(100, 100 - usedPercent)) }
 
-    /// 短い窓ほど「いま効いてくる」制限。5 時間枠を優先表示するための判定。
+    /// The shorter the window, the more it's a limit that "kicks in right now". A check for prioritizing the 5-hour window's display.
     var isShortWindow: Bool {
         guard let windowSeconds else { return false }
         return windowSeconds <= 6 * 3_600
     }
 
-    /// 今から date までを "2d 3h" / "42m" のように表す。
+    /// Renders from now until `date` as e.g. "2d 3h" / "42m".
     static func durationText(until date: Date) -> String {
         let interval = date.timeIntervalSinceNow
         guard interval.isFinite else { return "unknown" }
@@ -94,17 +94,29 @@ struct UsageWindow: Codable, Hashable, Identifiable {
         return "\(minutes)m"
     }
 
-    /// リセットまでの残り時間。
+    /// The time remaining until reset.
     var resetsInText: String? {
         resetsAt.map { UsageWindow.durationText(until: $0) }
     }
 }
 
+/// Codex's manual/reset credits. Extra uses available after the plan window is exhausted.
+/// `available` is only known from a live app-server response, so it's nil on a log-only fallback.
+struct ResetCredits: Codable, Hashable {
+    var available: Int
+}
+
+/// Claude's pay-as-you-go usage (extra usage beyond the plan window). Denominated in USD, matching the provider's display.
+struct ExtraUsage: Codable, Hashable {
+    var used: Double
+    var limit: Double
+}
+
 enum AgentStatus: String, Codable {
-    case ok            // 新しい実測値がある
-    case stale         // 値はあるが古い
-    case unavailable   // インストール済みだがデータ未取得
-    case notInstalled  // そもそも入っていない
+    case ok            // has a fresh real measurement
+    case stale         // has a value, but it's old
+    case unavailable   // installed, but data hasn't been fetched
+    case notInstalled  // not installed at all
 }
 
 struct AgentUsage: Codable, Hashable, Identifiable {
@@ -114,29 +126,33 @@ struct AgentUsage: Codable, Hashable, Identifiable {
     var plan: String?
     var windows: [UsageWindow]
     var observedAt: Date?
-    var source: String        // データの出どころ（UI のツールチップ用）
+    var source: String        // Where the data comes from (for the UI tooltip)
     var status: AgentStatus
-    var note: String?         // 未取得時に何をすれば良いかの案内
+    var note: String?         // Guidance on what to do when data hasn't been fetched
+    /// Codex only. nil if there's no live app-server route (not included in a log-only fallback).
+    var resetCredits: ResetCredits? = nil
+    /// Claude only. nil if unavailable or unset (the display side falls back to "Extra usage off").
+    var extraUsage: ExtraUsage? = nil
 
-    /// 代表値の候補。補助枠しか無い場合を除き、プラン枠だけを見る。
+    /// The candidate for the representative value. Looks only at plan windows, except when there are only supplementary ones.
     var primaryWindows: [UsageWindow] {
         let planned = windows.filter { !$0.isSupplementary }
         return planned.isEmpty ? windows : planned
     }
 
-    /// 一番逼迫しているウィンドウ。メニューバーの要約に使う。
+    /// The most constrained window. Used for the menu bar summary.
     var tightestWindow: UsageWindow? {
         primaryWindows.max { $0.usedPercent < $1.usedPercent }
     }
 
-    /// このエージェントを代表する窓。5 時間枠のような短い窓を優先する。
+    /// The window representing this agent. Prioritizes a short window like the 5-hour one.
     var headlineWindow: UsageWindow? {
         let short = primaryWindows.filter(\.isShortWindow)
         if let pick = short.max(by: { $0.usedPercent < $1.usedPercent }) { return pick }
         return tightestWindow
     }
 
-    /// 表示順。プラン枠を先に出し、その中では短い窓から並べる。
+    /// The display order. Plan windows come first, and within those, shorter windows come first.
     var displayWindows: [UsageWindow] {
         windows.sorted { lhs, rhs in
             if lhs.isSupplementary != rhs.isSupplementary { return !lhs.isSupplementary }
@@ -145,7 +161,7 @@ struct AgentUsage: Codable, Hashable, Identifiable {
         }
     }
 
-    /// Collectorの状態と観測時刻を統合した表示用の鮮度。
+    /// A display freshness that combines the collector's status with the observation time.
     var displayStatus: AgentStatus {
         displayStatus(at: Date())
     }
@@ -178,8 +194,8 @@ struct AgentUsage: Codable, Hashable, Identifiable {
         copy.windows = retained
         if retained.isEmpty {
             copy.status = .unavailable
-            // Collectorが掴んでいる具体的な理由のほうが行動につながる。
-            // 一般論の「期限切れ」で上書きすると、実際に必要な操作が見えなくなる。
+            // The specific reason the collector already has leads to a clearer action.
+            // Overwriting it with a generic "expired" would hide the operation actually needed.
             copy.note = note ?? expiredDataNote
         }
         return copy
@@ -203,7 +219,7 @@ struct AgentUsage: Codable, Hashable, Identifiable {
 struct UsageSnapshot: Codable, Hashable {
     var updatedAt: Date
     var agents: [AgentUsage]
-    /// 利用者が優先表示に指定したエージェント。未指定なら自動判定。
+    /// The agent the user designated for priority display. If unspecified, decided automatically.
     var preferredAgentID: String?
 
     static let empty = UsageSnapshot(updatedAt: .distantPast, agents: [])
@@ -216,10 +232,10 @@ struct UsageSnapshot: Codable, Hashable {
         )
     }
 
-    /// 見出しに出す 1 件。決め方は 3 段階。
-    ///  1. 利用者が優先指定したエージェント
-    ///  2. 5 時間枠のように短い窓（真っ先に効いてくるため）
-    ///  3. 全体で最も逼迫している窓
+    /// The single item shown in the headline. Decided in 3 stages:
+    ///  1. The agent the user designated for priority
+    ///  2. A short window like the 5-hour one (since it kicks in first)
+    ///  3. The most constrained window overall
     var headline: (agent: AgentUsage, window: UsageWindow)? {
         let actionable = agents.filter {
             ($0.displayStatus == .ok || $0.displayStatus == .stale) && !$0.windows.isEmpty
@@ -252,7 +268,7 @@ struct UsageSnapshot: Codable, Hashable {
         return all.max { $0.window.usedPercent < $1.window.usedPercent }
     }
 
-    /// 見出しと同じエージェントの、見出し以外の窓（7d など）。
+    /// A window other than the headline (e.g. 7d), belonging to the same agent as the headline.
     var headlineSecondary: UsageWindow? {
         guard let headline else { return nil }
         return headline.agent.windows.first { $0.id != headline.window.id }

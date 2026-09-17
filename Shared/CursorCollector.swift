@@ -1,10 +1,10 @@
 import Foundation
 
-/// Cursor の残量。
+/// Cursor's remaining allowance.
 ///
-/// Grok Bot と同じ cursor.com のアカウントで動くため、ログインは共有される。
-/// 内訳（Auto / API）も応答に入っているが、画面の案内が総量を使っているので
-/// こちらも総量だけを出す。
+/// Runs on the same cursor.com account as Grok Bot, so sign-in is shared.
+/// The response also includes a breakdown (Auto / API), but since the on-screen guidance uses
+/// the total, this shows only the total too.
 enum CursorCollector {
     struct Usage: Decodable, Sendable {
         struct Plan: Decodable, Sendable {
@@ -44,7 +44,7 @@ enum CursorCollector {
         }
     }
 
-    /// `~/.cursor` があるかどうかで判断する。入れていない人に設定を出しても仕方がない。
+    /// Judged by whether `~/.cursor` exists. There's no point showing settings to someone who hasn't installed it.
     static var installed: Bool {
         FileManager.default.fileExists(atPath: "\(NSHomeDirectory())/.cursor")
             || FileManager.default.fileExists(atPath: "/Applications/Cursor.app")
@@ -59,7 +59,7 @@ enum CursorCollector {
         let end = CursorAPI.parseEpochMilliseconds(usage.billingCycleEnd)
         let seconds = (start != nil && end != nil) ? end!.timeIntervalSince(start!) : nil
 
-        // 請求期間は月ごとで長さが揃わない。長さから見出しを作らず期間として扱う。
+        // Billing periods don't have a consistent length month to month. Treated as a period rather than building a label from its length.
         let window = UsageWindow(
             id: "cursor_period",
             label: "Period",

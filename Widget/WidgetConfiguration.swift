@@ -1,7 +1,7 @@
 import AppIntents
 import WidgetKit
 
-/// ウィジェットの「ウィジェットを編集」から選ぶエージェント。
+/// The agent chosen via the widget's "Edit Widget".
 struct AgentEntity: AppEntity {
     let id: String
     let name: String
@@ -14,7 +14,7 @@ struct AgentEntity: AppEntity {
     }
 }
 
-/// 候補は本体が書き出した snapshot から拾う。未インストールのものは出さない。
+/// Candidates are pulled from the snapshot the main app writes out. Uninstalled ones aren't shown.
 struct AgentQuery: EntityQuery {
     func entities(for identifiers: [AgentEntity.ID]) async throws -> [AgentEntity] {
         available().filter { identifiers.contains($0.id) }
@@ -44,6 +44,6 @@ struct SelectAgentsIntent: WidgetConfigurationIntent {
     @Parameter(title: "Agents")
     var agents: [AgentEntity]?
 
-    /// 未指定ならアプリ側の並び順をそのまま使う。
+    /// If unspecified, use the app's order as-is.
     var selectedIDs: [String] { (agents ?? []).map(\.id) }
 }

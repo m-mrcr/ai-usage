@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// 使用率バー。
+/// The usage bar.
 ///
-/// ProgressView はウィジェットのレンダラで determinate な塗りが反映されず
-/// トラックだけが描かれてしまうため、図形で自前描画する。
+/// ProgressView's determinate fill isn't rendered by the widget's renderer — only the track
+/// gets drawn — so this is custom-drawn with shapes instead.
 struct UsageBar: View {
     let percent: Double
     var height: CGFloat = 7
@@ -26,7 +26,7 @@ struct UsageBar: View {
                                 endPoint: .trailing
                             )
                         )
-                        // 極端に細いと角丸が潰れるので下限を設ける
+                        // Sets a floor, since an extremely thin bar would crush the rounded corners
                         .frame(width: max(height, geometry.size.width * fraction))
                 }
             }
@@ -45,7 +45,7 @@ struct UsageBar: View {
     }
 }
 
-/// 使用率の段階。色はここに集約する。
+/// Usage severity tiers. Colors are centralized here.
 enum UsageSeverity {
     case calm, moderate, high, critical
 
@@ -67,13 +67,13 @@ enum UsageSeverity {
         }
     }
 
-    /// 左端をやや暗く始めて奥行きを出す。
+    /// Starts slightly darker at the left edge to add depth.
     var gradient: [Color] {
         [color.opacity(0.72), color]
     }
 }
 
-/// 窓の長さラベル。5h のような短い窓は色を付けて主張させる。
+/// The window-length label. A short window like 5h is given color to stand out.
 struct WindowChip: View {
     let window: UsageWindow
     var emphasized: Bool = false

@@ -1,20 +1,26 @@
 import Foundation
 
-/// Claude Code の残量。
+/// Claude Code's remaining allowance.
 ///
-/// 取得経路は 2 つあり、上から順に試す。
-///  1. OAuth usage エンドポイント（`/usage` と同じ）。Claude Code が動いていなくても
-///     現在値が取れるので、定期更新できるのはこちらだけ。
-///  2. statusLine フックが書いた claude.json。ターミナル版でしか発火しないが、
-///     通信も Keychain も使わない予備経路。
+/// There are two collection routes, tried in order:
+///  1. The OAuth usage endpoint (same as `/usage`). Gets the current value even when
+///     Claude Code isn't running, so this is the only one that can update periodically.
+///  2. `claude.json` written by the statusLine hook. Only fires from the terminal version,
+///     but it's a fallback route that uses neither network nor Keychain.
 enum ClaudeCollector {
     static func collect(force: Bool = false) async -> AgentUsage {
+        var agent: AgentUsage
         switch await ClaudeUsageAPI.shared.fetch(force: force) {
         case let .result(live):
-            return fromAPI(live)
+            agent = fromAPI(live)
         case let .unavailable(reason):
-            return fromStatusLine(apiFailure: reason)
+            agent = fromStatusLine(apiFailure: reason)
         }
+        // If there are no credentials, ClaudeExtraUsageAPI immediately returns nil, so this is safe even when uninstalled.
+        if let extra = await ClaudeExtraUsageAPI.fetch(force: force) {
+            agent.extraUsage = ExtraUsage(used: extra.used, limit: extra.limit)
+        }
+        return agent
     }
 
     // MARK: - 1) OAuth API
@@ -47,7 +53,7 @@ enum ClaudeCollector {
         )
     }
 
-    // MARK: - 2) statusLine の書き出し
+    // MARK: - 2) statusLine's output
 
     private struct StatusLinePayload: Decodable {
         struct Window: Decodable {
@@ -91,8 +97,8 @@ enum ClaudeCollector {
                                     maximumFuture: 5 * 60)
         let isStale = observedAt.map { Date().timeIntervalSince($0) > 6 * 3_600 } ?? true
 
-        // statusLineの控えが残っていても、API側が落ちている理由は伝え続ける。
-        // ここでnilにすると、値が古くなった後で「なぜ更新されないか」が画面から消える。
+        // Even if statusLine's backup data remains, keep reporting why the API side is failing.
+        // Setting this to nil here would, once the value goes stale, remove "why isn't this updating" from the screen.
         return AgentUsage(
             id: "claude-code", name: "Claude Code", plan: nil,
             windows: windows, observedAt: observedAt,

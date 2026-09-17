@@ -1,5 +1,5 @@
 #!/bin/bash
-# 公開済みimmutable GitHub Releaseを検証し、Cloudflare配信用assetとSparkle appcastを準備する。
+# Verifies the published immutable GitHub Release and prepares the Cloudflare distribution assets and the Sparkle appcast.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -74,7 +74,7 @@ cleanup() {
   trap - EXIT
 
   if ! cleanup_mount; then
-    printf 'error: DMG mountを解除できませんでした: %s\n' "$MOUNT_DIR" >&2
+    printf 'error: could not detach the DMG mount: %s\n' "$MOUNT_DIR" >&2
     if [ "$script_status" -eq 0 ]; then
       script_status=1
     fi
@@ -110,14 +110,14 @@ cleanup() {
   fi
 
   if [ "$ASSET_LOCK_HELD" -eq 1 ] && ! rmdir "$ASSET_LOCK_DIR"; then
-    printf 'error: public asset lockを解除できませんでした: %s\n' "$ASSET_LOCK_DIR" >&2
+    printf 'error: could not release the public asset lock: %s\n' "$ASSET_LOCK_DIR" >&2
     if [ "$script_status" -eq 0 ]; then
       script_status=1
     fi
   fi
 
   if [ "$LOCK_HELD" -eq 1 ] && ! rmdir "$LOCK_DIR"; then
-    printf 'error: appcast lockを解除できませんでした: %s\n' "$LOCK_DIR" >&2
+    printf 'error: could not release the appcast lock: %s\n' "$LOCK_DIR" >&2
     if [ "$script_status" -eq 0 ]; then
       script_status=1
     fi
@@ -130,25 +130,25 @@ canonicalize_public_assets_root() {
   local canonical
 
   [[ "$input" == /* ]] \
-    || fail "--public-assets-rootは絶対pathで指定してください"
+    || fail "--public-assets-root must be specified as an absolute path"
   case "$input" in
     *//*|*/./*|*/../*|*/.|*/..)
-      fail "--public-assets-rootに非canonicalなpath要素を使用できません: $input"
+      fail "--public-assets-root cannot contain non-canonical path elements: $input"
       ;;
   esac
   case "$input" in
     */public/ai-usage/releases) ;;
     *)
-      fail "--public-assets-rootは/public/ai-usage/releasesで終わる必要があります"
+      fail "--public-assets-root must end with /public/ai-usage/releases"
       ;;
   esac
   [ -d "$input" ] && [ ! -L "$input" ] \
-    || fail "--public-assets-rootは既存の非symlink directoryを指定してください: $input"
+    || fail "--public-assets-root must be an existing, non-symlink directory: $input"
 
   canonical=$(cd "$input" && pwd -P) \
-    || fail "--public-assets-rootを解決できません: $input"
+    || fail "could not resolve --public-assets-root: $input"
   [ "$canonical" = "$input" ] \
-    || fail "--public-assets-rootまたは親directoryにsymlinkを使用できません: $input"
+    || fail "--public-assets-root or a parent directory cannot be a symlink: $input"
   printf '%s\n' "$canonical"
 }
 
@@ -157,11 +157,11 @@ assert_cloudflare_asset_size() {
   local size
 
   [ -f "$path" ] && [ ! -L "$path" ] \
-    || fail "Cloudflareへ配置するassetが通常fileではありません: $path"
+    || fail "the asset to deploy to Cloudflare is not a regular file: $path"
   size=$(stat -f '%z' "$path") \
-    || fail "asset sizeを取得できません: $path"
+    || fail "could not get asset size: $path"
   [ "$size" -lt "$CLOUDFLARE_MAX_STATIC_ASSET_BYTES" ] \
-    || fail "Cloudflare Static Assetsの25 MiB未満制約を超えています: $path ($size bytes)"
+    || fail "exceeds the Cloudflare Static Assets 25 MiB limit: $path ($size bytes)"
 }
 
 set_release_archive_mtime() {
@@ -172,20 +172,20 @@ set_release_archive_mtime() {
   local archive_mtime_epoch
 
   [[ "$published_at" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] \
-    || fail "GitHub ReleaseのpublishedAt形式が不正です: $published_at"
+    || fail "GitHub Release publishedAt format is invalid: $published_at"
   expected_epoch=$(/bin/date -j -u -f '%Y-%m-%dT%H:%M:%SZ' \
     "$published_at" '+%s') \
-    || fail "Release公開日時を変換できません: $published_at"
+    || fail "could not convert the Release publication timestamp: $published_at"
   TZ=UTC0 /usr/bin/touch -m -d "$published_at" "$archive_path" \
-    || fail "Release公開日時をarchiveへ設定できません: $archive_path"
+    || fail "could not set the Release publication timestamp on the archive: $archive_path"
   archive_birth_epoch=$(stat -f '%B' "$archive_path") \
-    || fail "archiveの作成日時を取得できません: $archive_path"
+    || fail "could not get the archive's creation time: $archive_path"
   archive_mtime_epoch=$(stat -f '%m' "$archive_path") \
-    || fail "archiveの更新日時を取得できません: $archive_path"
+    || fail "could not get the archive's modification time: $archive_path"
   [ "$archive_birth_epoch" = "$expected_epoch" ] \
-    || fail "archiveの作成日時がRelease公開日時と一致しません: $archive_path"
+    || fail "the archive's creation time does not match the Release publication timestamp: $archive_path"
   [ "$archive_mtime_epoch" = "$expected_epoch" ] \
-    || fail "archiveの更新日時がRelease公開日時と一致しません: $archive_path"
+    || fail "the archive's modification time does not match the Release publication timestamp: $archive_path"
 }
 
 copy_release_archive_for_appcast() {
@@ -194,7 +194,7 @@ copy_release_archive_for_appcast() {
   local published_at=$3
 
   /bin/cp "$source_path" "$archive_path" \
-    || fail "appcast生成用archiveをコピーできません: $source_path"
+    || fail "could not copy the archive for appcast generation: $source_path"
   set_release_archive_mtime "$published_at" "$archive_path"
 }
 
@@ -204,46 +204,46 @@ stage_public_release_assets() {
 
   ASSET_LOCK_DIR="$PUBLIC_ASSETS_ROOT/.$TAG.lock"
   [ ! -e "$ASSET_LOCK_DIR" ] && [ ! -L "$ASSET_LOCK_DIR" ] \
-    || fail "public asset lockが既に存在します: $ASSET_LOCK_DIR"
+    || fail "the public asset lock already exists: $ASSET_LOCK_DIR"
   mkdir "$ASSET_LOCK_DIR" 2>/dev/null \
-    || fail "public asset lockを取得できません: $ASSET_LOCK_DIR"
+    || fail "could not acquire the public asset lock: $ASSET_LOCK_DIR"
   ASSET_LOCK_HELD=1
 
   if [ -e "$target_dir" ] || [ -L "$target_dir" ]; then
     [ -d "$target_dir" ] && [ ! -L "$target_dir" ] \
-      || fail "既存のversion配布先が非symlink directoryではありません: $target_dir"
+      || fail "the existing version distribution directory is not a non-symlink directory: $target_dir"
     [ -f "$target_dir/$DMG_NAME" ] && [ ! -L "$target_dir/$DMG_NAME" ] \
-      || fail "既存の公開DMGが通常fileではありません: $target_dir/$DMG_NAME"
+      || fail "the existing published DMG is not a regular file: $target_dir/$DMG_NAME"
     [ -f "$target_dir/$CHECKSUM_NAME" ] && [ ! -L "$target_dir/$CHECKSUM_NAME" ] \
-      || fail "既存の公開checksumが通常fileではありません: $target_dir/$CHECKSUM_NAME"
+      || fail "the existing published checksum is not a regular file: $target_dir/$CHECKSUM_NAME"
     entry_count=$(find "$target_dir" -mindepth 1 -maxdepth 1 -print | wc -l | tr -d ' ')
     [ "$entry_count" = "2" ] \
-      || fail "既存のversion配布先はDMG/checksumの2 fileだけである必要があります: $target_dir"
+      || fail "the existing version distribution directory must contain only the DMG and checksum files: $target_dir"
     cmp -s "$RELEASE_DMG" "$target_dir/$DMG_NAME" \
-      || fail "既存の公開DMGは検証済みRelease assetとbyte一致しません"
+      || fail "the existing published DMG is not byte-identical to the verified Release asset"
     cmp -s "$RELEASE_CHECKSUM" "$target_dir/$CHECKSUM_NAME" \
-      || fail "既存の公開checksumは検証済みRelease assetとbyte一致しません"
+      || fail "the existing published checksum is not byte-identical to the verified Release asset"
     ASSET_STAGE_RESULT="unchanged"
   else
     ASSET_STAGE_DIR=$(mktemp -d "$PUBLIC_ASSETS_ROOT/.$TAG.stage.XXXXXX") \
-      || fail "public asset staging directoryを作成できません"
+      || fail "could not create the public asset staging directory"
     chmod 755 "$ASSET_STAGE_DIR"
     cp -p "$RELEASE_DMG" "$ASSET_STAGE_DIR/$DMG_NAME"
     cp -p "$RELEASE_CHECKSUM" "$ASSET_STAGE_DIR/$CHECKSUM_NAME"
     chmod 644 "$ASSET_STAGE_DIR/$DMG_NAME" "$ASSET_STAGE_DIR/$CHECKSUM_NAME"
     cmp -s "$RELEASE_DMG" "$ASSET_STAGE_DIR/$DMG_NAME" \
-      || fail "stagingしたDMGが検証済みRelease assetと一致しません"
+      || fail "the staged DMG does not match the verified Release asset"
     cmp -s "$RELEASE_CHECKSUM" "$ASSET_STAGE_DIR/$CHECKSUM_NAME" \
-      || fail "stagingしたchecksumが検証済みRelease assetと一致しません"
+      || fail "the staged checksum does not match the verified Release asset"
     [ ! -e "$target_dir" ] && [ ! -L "$target_dir" ] \
-      || fail "staging中にversion配布先が作成されました: $target_dir"
+      || fail "the version distribution directory was created during staging: $target_dir"
     mv "$ASSET_STAGE_DIR" "$target_dir"
     ASSET_STAGE_DIR=""
     ASSET_STAGE_RESULT="created"
   fi
 
   rmdir "$ASSET_LOCK_DIR" \
-    || fail "public asset lockを解除できませんでした: $ASSET_LOCK_DIR"
+    || fail "could not release the public asset lock: $ASSET_LOCK_DIR"
   ASSET_LOCK_HELD=0
 }
 
@@ -293,10 +293,10 @@ done
   || { usage >&2; exit 2; }
 
 [[ "$REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
-  || fail "--repositoryはOWNER/REPO形式で指定してください"
+  || fail "--repository must be specified in OWNER/REPO format"
 [[ "$TAG" =~ ^v[0-9]+([.][0-9]+)*$ ]] \
-  || fail "--tagはvX.Y.Z形式のstable versionを指定してください"
-[[ "$OUTPUT" == *.xml ]] || fail "--outputには.xml fileを指定してください"
+  || fail "--tag must be a stable version in vX.Y.Z format"
+[[ "$OUTPUT" == *.xml ]] || fail "--output must be an .xml file"
 
 VERSION=${TAG#v}
 DMG_NAME="AIUsage-$VERSION.dmg"
@@ -306,32 +306,32 @@ LOCAL_CHECKSUM="$ROOT/dist/$CHECKSUM_NAME"
 
 OUTPUT_PARENT_INPUT=$(dirname "$OUTPUT")
 [ -d "$OUTPUT_PARENT_INPUT" ] \
-  || fail "--outputの親directoryがありません: $OUTPUT_PARENT_INPUT"
+  || fail "the parent directory of --output does not exist: $OUTPUT_PARENT_INPUT"
 OUTPUT_PARENT=$(cd "$OUTPUT_PARENT_INPUT" && pwd -P)
 OUTPUT_NAME=$(basename "$OUTPUT")
 OUTPUT="$OUTPUT_PARENT/$OUTPUT_NAME"
-[ ! -L "$OUTPUT" ] || fail "symlinkをappcast出力先には使用できません: $OUTPUT"
+[ ! -L "$OUTPUT" ] || fail "a symlink cannot be used as the appcast output destination: $OUTPUT"
 if [ -e "$OUTPUT" ] && [ ! -f "$OUTPUT" ]; then
-  fail "既存のappcast出力先が通常fileではありません: $OUTPUT"
+  fail "the existing appcast output destination is not a regular file: $OUTPUT"
 fi
 
 for command_name in gh jq shasum cmp codesign spctl xcrun plutil xmllint python3 \
                     diskutil hdiutil; do
   command -v "$command_name" >/dev/null 2>&1 \
-    || fail "必要なcommandがありません: $command_name"
+    || fail "required command not found: $command_name"
 done
 
 PUBLIC_ASSETS_ROOT=$(canonicalize_public_assets_root "$PUBLIC_ASSETS_ROOT")
 
 [ -f "$LOCAL_DMG" ] && [ ! -L "$LOCAL_DMG" ] \
-  || fail "local notarized DMGがありません: $LOCAL_DMG"
+  || fail "local notarized DMG not found: $LOCAL_DMG"
 [ -f "$LOCAL_CHECKSUM" ] && [ ! -L "$LOCAL_CHECKSUM" ] \
-  || fail "local checksumがありません: $LOCAL_CHECKSUM"
-[ -f "$ROOT/App/Info.plist" ] || fail "App/Info.plistがありません"
+  || fail "local checksum not found: $LOCAL_CHECKSUM"
+[ -f "$ROOT/App/Info.plist" ] || fail "App/Info.plist not found"
 
 mkdir -p "$ROOT/build"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  fail "別のappcast生成が実行中です: $LOCK_DIR"
+  fail "another appcast generation is running: $LOCK_DIR"
 fi
 LOCK_HELD=1
 WORK_DIR=$(mktemp -d "$ROOT/build/appcast-work.XXXXXX")
@@ -342,34 +342,34 @@ GENERATE_APPCAST="$SPARKLE_TOOLS/generate_appcast"
 SIGN_UPDATE="$SPARKLE_TOOLS/sign_update"
 GENERATE_KEYS="$SPARKLE_TOOLS/generate_keys"
 
-# -pは既存の公開鍵だけを返す。秘密鍵はKeychainからexportせず、出力もしない。
+# -p returns only the existing public key. The private key is never exported from the Keychain or printed.
 if ! KEYCHAIN_PUBLIC_KEY=$("$GENERATE_KEYS" --account "$KEYCHAIN_ACCOUNT" -p); then
-  fail "Sparkle署名鍵をKeychain account $KEYCHAIN_ACCOUNT から取得できません"
+  fail "could not get the Sparkle signing key from Keychain account $KEYCHAIN_ACCOUNT"
 fi
 APP_PUBLIC_KEY=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$ROOT/App/Info.plist" 2>/dev/null) \
-  || fail "App/Info.plistにSUPublicEDKeyがありません"
+  || fail "App/Info.plist has no SUPublicEDKey"
 [ -n "$KEYCHAIN_PUBLIC_KEY" ] && [ "$KEYCHAIN_PUBLIC_KEY" = "$APP_PUBLIC_KEY" ] \
-  || fail "KeychainのSparkle公開鍵がApp/Info.plistと一致しません"
+  || fail "the Sparkle public key in the Keychain does not match App/Info.plist"
 
 if [ -f "$OUTPUT" ]; then
-  xmllint --noout "$OUTPUT" || fail "既存appcastがwell-formed XMLではありません"
+  xmllint --noout "$OUTPUT" || fail "the existing appcast is not well-formed XML"
   "$SIGN_UPDATE" --account "$KEYCHAIN_ACCOUNT" --verify "$OUTPUT" >/dev/null \
-    || fail "既存appcastの署名を検証できません"
+    || fail "could not verify the existing appcast's signature"
 fi
 
 REPOSITORY_JSON="$WORK_DIR/repository.json"
 if ! gh repo view "$REPOSITORY" --json nameWithOwner,visibility >"$REPOSITORY_JSON"; then
-  fail "GitHub repositoryを取得できません: $REPOSITORY"
+  fail "could not get GitHub repository: $REPOSITORY"
 fi
 chmod 600 "$REPOSITORY_JSON"
 CANONICAL_REPOSITORY=$(jq -er '.nameWithOwner' "$REPOSITORY_JSON") \
-  || fail "GitHubが返したrepository名を取得できません"
+  || fail "could not get the repository name returned by GitHub"
 [[ "$CANONICAL_REPOSITORY" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
-  || fail "GitHubが返したrepository名が不正です"
+  || fail "the repository name returned by GitHub is invalid"
 REPOSITORY_VISIBILITY=$(jq -er '.visibility' "$REPOSITORY_JSON") \
-  || fail "GitHub repositoryのvisibilityを取得できません"
+  || fail "could not get the GitHub repository's visibility"
 [ "$REPOSITORY_VISIBILITY" = "PUBLIC" ] \
-  || fail "GitHub repositoryはPublicである必要があります: $CANONICAL_REPOSITORY"
+  || fail "the GitHub repository must be public: $CANONICAL_REPOSITORY"
 REPOSITORY="$CANONICAL_REPOSITORY"
 
 RELEASE_JSON="$WORK_DIR/release.json"
@@ -377,7 +377,7 @@ if ! gh release view "$TAG" \
      --repo "$REPOSITORY" \
      --json tagName,isDraft,isPrerelease,isImmutable,publishedAt,assets \
      >"$RELEASE_JSON"; then
-  fail "GitHub Releaseを取得できません: $REPOSITORY $TAG"
+  fail "could not get GitHub Release: $REPOSITORY $TAG"
 fi
 chmod 600 "$RELEASE_JSON"
 
@@ -398,11 +398,11 @@ jq -e \
           and (.digest | type == "string"
                and test("^sha256:[0-9a-f]{64}$"))))
   ' "$RELEASE_JSON" >/dev/null \
-  || fail "ReleaseはPublish済み・stable・immutableで、DMG/checksumの2 assetだけである必要があります"
+  || fail "the Release must be published, stable, immutable, and contain only the DMG and checksum assets"
 
-# immutable releaseのGitHub attestationも、appcastへ採用する前に確認する。
+# Also verify the immutable release's GitHub attestation before adopting it into the appcast.
 gh release verify "$TAG" --repo "$REPOSITORY" >/dev/null \
-  || fail "GitHub immutable release attestationを検証できません"
+  || fail "could not verify the GitHub immutable release attestation"
 
 DOWNLOAD_DIR="$WORK_DIR/download"
 mkdir "$DOWNLOAD_DIR"
@@ -415,9 +415,9 @@ gh release download "$TAG" \
 PUBLIC_DMG="$DOWNLOAD_DIR/$DMG_NAME"
 PUBLIC_CHECKSUM="$DOWNLOAD_DIR/$CHECKSUM_NAME"
 [ -f "$PUBLIC_DMG" ] && [ -f "$PUBLIC_CHECKSUM" ] \
-  || fail "GitHub ReleaseのDMG/checksumをdownloadできませんでした"
+  || fail "could not download the GitHub Release's DMG/checksum"
 [ "$(find "$DOWNLOAD_DIR" -mindepth 1 -maxdepth 1 -type f | wc -l | tr -d ' ')" = "2" ] \
-  || fail "downloadしたasset数が2件ではありません"
+  || fail "the number of downloaded assets is not 2"
 RELEASE_DMG="$PUBLIC_DMG"
 RELEASE_CHECKSUM="$PUBLIC_CHECKSUM"
 
@@ -448,9 +448,9 @@ checksum_value() {
 PUBLIC_DMG_SHA=$(file_sha256 "$PUBLIC_DMG")
 LOCAL_DMG_SHA=$(file_sha256 "$LOCAL_DMG")
 PUBLIC_CHECKSUM_VALUE=$(checksum_value "$PUBLIC_CHECKSUM" "$DMG_NAME") \
-  || fail "Release checksum fileの形式またはfilenameが不正です"
+  || fail "the Release checksum file's format or filename is invalid"
 LOCAL_CHECKSUM_VALUE=$(checksum_value "$LOCAL_CHECKSUM" "$DMG_NAME") \
-  || fail "local checksum fileの形式またはfilenameが不正です"
+  || fail "the local checksum file's format or filename is invalid"
 GITHUB_DMG_SHA=$(jq -er --arg name "$DMG_NAME" \
   '.assets[] | select(.name == $name) | .digest | sub("^sha256:"; "")' \
   "$RELEASE_JSON")
@@ -460,29 +460,29 @@ GITHUB_CHECKSUM_SHA=$(jq -er --arg name "$CHECKSUM_NAME" \
 PUBLIC_CHECKSUM_SHA=$(file_sha256 "$PUBLIC_CHECKSUM")
 
 [ "$PUBLIC_DMG_SHA" = "$PUBLIC_CHECKSUM_VALUE" ] \
-  || fail "Release DMGとRelease checksumが一致しません"
+  || fail "the Release DMG and Release checksum do not match"
 [ "$PUBLIC_DMG_SHA" = "$GITHUB_DMG_SHA" ] \
-  || fail "Release DMGとGitHub asset digestが一致しません"
+  || fail "the Release DMG and GitHub asset digest do not match"
 [ "$PUBLIC_DMG_SHA" = "$LOCAL_DMG_SHA" ] \
-  || fail "Release DMGとlocal dist DMGが一致しません"
+  || fail "the Release DMG and local dist DMG do not match"
 [ "$LOCAL_DMG_SHA" = "$LOCAL_CHECKSUM_VALUE" ] \
-  || fail "local dist DMGとlocal checksumが一致しません"
+  || fail "the local dist DMG and local checksum do not match"
 [ "$PUBLIC_CHECKSUM_SHA" = "$GITHUB_CHECKSUM_SHA" ] \
-  || fail "Release checksumとGitHub asset digestが一致しません"
+  || fail "the Release checksum and GitHub asset digest do not match"
 cmp -s "$PUBLIC_CHECKSUM" "$LOCAL_CHECKSUM" \
-  || fail "Release checksum fileとlocal checksum fileがbyte単位で一致しません"
+  || fail "the Release checksum file and local checksum file are not byte-identical"
 
 GITHUB_DMG_SIZE=$(jq -er --arg name "$DMG_NAME" \
   '.assets[] | select(.name == $name) | .size' "$RELEASE_JSON")
 PUBLIC_DMG_SIZE=$(stat -f '%z' "$PUBLIC_DMG")
 [ "$PUBLIC_DMG_SIZE" = "$GITHUB_DMG_SIZE" ] \
-  || fail "Release DMGのsizeがGitHub metadataと一致しません"
+  || fail "the Release DMG's size does not match GitHub metadata"
 
 EXPECTED_GITHUB_DOWNLOAD_URL="https://github.com/$REPOSITORY/releases/download/$TAG/$DMG_NAME"
 GITHUB_DOWNLOAD_URL=$(jq -er --arg name "$DMG_NAME" \
   '.assets[] | select(.name == $name) | .url' "$RELEASE_JSON")
 [ "$GITHUB_DOWNLOAD_URL" = "$EXPECTED_GITHUB_DOWNLOAD_URL" ] \
-  || fail "GitHub Release asset URLが固定tag URLと一致しません"
+  || fail "the GitHub Release asset URL does not match the pinned tag URL"
 EXPECTED_DOWNLOAD_URL="$PUBLIC_DOWNLOAD_BASE/$TAG/$DMG_NAME"
 
 assert_cloudflare_asset_size "$RELEASE_DMG"
@@ -505,20 +505,20 @@ elif hdiutil attach -nobrowse -readonly -mountpoint "$MOUNT_DIR" \
        "$PUBLIC_DMG" >/dev/null 2>&1; then
   MOUNTED=1
 else
-  fail "Release DMGを読み取り専用でmountできません"
+  fail "could not mount the Release DMG read-only"
 fi
 
 MOUNTED_APP="$MOUNT_DIR/$APP_NAME.app"
-[ -d "$MOUNTED_APP" ] || fail "Release DMGに$APP_NAME.appがありません"
+[ -d "$MOUNTED_APP" ] || fail "$APP_NAME.app is missing from the Release DMG"
 [ "$(find "$MOUNT_DIR" -mindepth 1 -maxdepth 1 -type d -name '*.app' | wc -l | tr -d ' ')" = "1" ] \
-  || fail "Release DMG内のapp bundleが1件ではありません"
+  || fail "the number of app bundles in the Release DMG is not 1"
 
 codesign --verify --deep --strict --verbose=2 "$MOUNTED_APP" 2>&1 | sed 's/^/    /'
 xcrun stapler validate "$MOUNTED_APP" 2>&1 | sed 's/^/    /'
 spctl --assess --type execute -vv "$MOUNTED_APP" 2>&1 | sed 's/^/    /'
 
 APP_INFO="$MOUNTED_APP/Contents/Info.plist"
-[ -f "$APP_INFO" ] || fail "Release appのInfo.plistがありません"
+[ -f "$APP_INFO" ] || fail "the Release app's Info.plist is missing"
 plist_value() {
   /usr/libexec/PlistBuddy -c "Print :$1" "$2" 2>/dev/null
 }
@@ -532,30 +532,30 @@ REQUIRE_SIGNED_FEED=$(plist_value SURequireSignedFeed "$APP_INFO")
 VERIFY_BEFORE_EXTRACTION=$(plist_value SUVerifyUpdateBeforeExtraction "$APP_INFO")
 
 [ "$RELEASE_BUNDLE_ID" = "$APP_BUNDLE_ID" ] \
-  || fail "Release appのbundle IDが不正です: $RELEASE_BUNDLE_ID"
+  || fail "the Release app's bundle ID is invalid: $RELEASE_BUNDLE_ID"
 [ "$RELEASE_VERSION" = "$VERSION" ] \
-  || fail "tagとRelease appのversionが一致しません: $RELEASE_VERSION"
+  || fail "the tag and the Release app's version do not match: $RELEASE_VERSION"
 [[ "$RELEASE_BUILD" =~ ^[0-9]+$ ]] \
-  || fail "Release appのbuild numberが数値ではありません: $RELEASE_BUILD"
+  || fail "the Release app's build number is not numeric: $RELEASE_BUILD"
 [ "$RELEASE_FEED_URL" = "$FEED_URL" ] \
-  || fail "Release appのSparkle feed URLが不正です: $RELEASE_FEED_URL"
+  || fail "the Release app's Sparkle feed URL is invalid: $RELEASE_FEED_URL"
 [ "$RELEASE_PUBLIC_KEY" = "$KEYCHAIN_PUBLIC_KEY" ] \
-  || fail "Release appのSparkle公開鍵がKeychainと一致しません"
+  || fail "the Release app's Sparkle public key does not match the Keychain"
 [ "$REQUIRE_SIGNED_FEED" = "true" ] \
-  || fail "Release appでSURequireSignedFeedが有効ではありません"
+  || fail "SURequireSignedFeed is not enabled in the Release app"
 [ "$VERIFY_BEFORE_EXTRACTION" = "true" ] \
-  || fail "Release appでSUVerifyUpdateBeforeExtractionが有効ではありません"
+  || fail "SUVerifyUpdateBeforeExtraction is not enabled in the Release app"
 
 PROJECT_VERSION=$(/usr/bin/awk '$1 == "MARKETING_VERSION:" {gsub(/"/, "", $2); print $2; exit}' \
   "$ROOT/project.yml")
 PROJECT_BUILD=$(/usr/bin/awk '$1 == "CURRENT_PROJECT_VERSION:" {gsub(/"/, "", $2); print $2; exit}' \
   "$ROOT/project.yml")
 [ "$PROJECT_VERSION" = "$RELEASE_VERSION" ] \
-  || fail "project.ymlとRelease appのversionが一致しません"
+  || fail "project.yml and the Release app's version do not match"
 [ "$PROJECT_BUILD" = "$RELEASE_BUILD" ] \
-  || fail "project.ymlとRelease appのbuild numberが一致しません"
+  || fail "project.yml and the Release app's build number do not match"
 
-cleanup_mount || fail "Release DMGのmountを解除できません"
+cleanup_mount || fail "could not detach the Release DMG mount"
 
 ARCHIVES_DIR="$WORK_DIR/archives"
 mkdir "$ARCHIVES_DIR"
@@ -581,11 +581,11 @@ fi
   -o "$GENERATED_APPCAST" \
   "$ARCHIVES_DIR"
 
-[ -f "$GENERATED_APPCAST" ] || fail "appcastが生成されませんでした"
+[ -f "$GENERATED_APPCAST" ] || fail "appcast was not generated"
 [ "$(find "$ARCHIVES_DIR" -type f -name '*.delta' | wc -l | tr -d ' ')" = "0" ] \
-  || fail "delta updateが生成されました"
+  || fail "a delta update was generated"
 xmllint --noout "$GENERATED_APPCAST" \
-  || fail "生成appcastがwell-formed XMLではありません"
+  || fail "the generated appcast is not well-formed XML"
 
 FEED_VALIDATION="$WORK_DIR/feed-validation.txt"
 python3 - \
@@ -705,14 +705,14 @@ PY
 ENCLOSURE_SIGNATURE=$(sed -n '1p' "$FEED_VALIDATION")
 OLD_ITEM_COUNT=$(sed -n '2p' "$FEED_VALIDATION")
 NEW_ITEM_COUNT=$(sed -n '3p' "$FEED_VALIDATION")
-[ -n "$ENCLOSURE_SIGNATURE" ] || fail "enclosure署名を取得できません"
+[ -n "$ENCLOSURE_SIGNATURE" ] || fail "could not get the enclosure signature"
 
 "$SIGN_UPDATE" --account "$KEYCHAIN_ACCOUNT" --verify "$GENERATED_APPCAST" >/dev/null \
-  || fail "生成appcastのfeed署名を検証できません"
+  || fail "could not verify the generated appcast's feed signature"
 "$SIGN_UPDATE" \
   --account "$KEYCHAIN_ACCOUNT" \
   --verify "$PUBLIC_DMG" "$ENCLOSURE_SIGNATURE" >/dev/null \
-  || fail "生成appcastのenclosure署名を検証できません"
+  || fail "could not verify the generated appcast's enclosure signature"
 
 stage_public_release_assets
 

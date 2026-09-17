@@ -1,5 +1,5 @@
 #!/bin/bash
-# AIUsage が所有している statusLine だけを外し、導入前の値を復元する。
+# Removes only the statusLine owned by AIUsage, and restores the value from before it was installed.
 set -euo pipefail
 umask 077
 
@@ -117,7 +117,7 @@ if state is not None:
     if state.get("version") != 1 or not isinstance(state.get("installed"), dict):
         raise ValueError(f"invalid installer state: {state_path}")
     if not current_exists or current != state["installed"]:
-        print("not removed: 現在の statusLine は AIUsage が導入した値から変更されています", file=sys.stderr)
+        print("not removed: the current statusLine has been changed from the value AIUsage installed", file=sys.stderr)
         sys.exit(2)
 
     if bool(state.get("had_previous")):
@@ -135,7 +135,7 @@ if state is not None:
     print("backup:", backup)
     print(action)
 else:
-    # 旧版インストーラには state が無い。現在のスクリプトと完全一致する場合だけ外す。
+    # An old installer has no state. Only remove it when it exactly matches the current script.
     legacy = {
         "type": "command",
         "command": os.environ["EXPECTED_PATH"],
@@ -149,6 +149,6 @@ else:
         print("backup:", backup)
         print("removed legacy AIUsage statusLine (previous value is available only in .bak-aiusage files)")
     else:
-        print("not removed: AIUsage の所有を確認できる statusLine はありません", file=sys.stderr)
+        print("not removed: no statusLine could be confirmed as owned by AIUsage", file=sys.stderr)
         sys.exit(2)
 PY

@@ -1,21 +1,21 @@
 import SwiftUI
 import WebKit
 
-/// 対象サイトへアプリ内でログインしてもらい、その WebView が受け取った Cookie から
-/// 必要な分だけを取り出す。
+/// Has the user sign in to a target site inside the app, and extracts only what's needed
+/// from the cookies the WebView received.
 ///
-/// 利用者にブラウザの開発者ツールを開かせないための入口。データストアは
-/// 使い捨て（`.nonPersistent()`）にしてあるので、ログインセッションがディスクへ残らず、
-/// 取り出した値だけが Keychain に入る。
+/// An entry point so the user never has to open the browser's developer tools. The data store
+/// is disposable (`.nonPersistent()`), so the login session never lands on disk —
+/// only the extracted value goes into Keychain.
 struct WebSignInView: View {
     struct Target {
         let loginURL: URL
         let cookieDomain: String
-        /// 集まった Cookie から保存する文字列を組み立てる。足りなければ nil。
+        /// Builds the string to save from the collected cookies. nil if there isn't enough.
         let extract: ([HTTPCookie]) -> String?
-        /// ログインが成立したかを実際の応答で確かめる。
-        /// Cookie 名が公開されていない相手では、名前を決め打ちするより確実。
-        /// nil なら extract が返った時点で成立とみなす。
+        /// Confirms sign-in succeeded via a real response.
+        /// More reliable than hardcoding a cookie name for a target whose cookie names aren't public.
+        /// If nil, success is assumed as soon as extract returns a value.
         let verify: ((String) async -> Bool)?
         let save: (String) -> Bool
     }
@@ -64,7 +64,7 @@ private struct SignInWebView: NSViewRepresentable {
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
-        // 使い捨てのストア。ログイン状態をディスクへ残さない。
+        // A disposable store. Never leaves login state on disk.
         configuration.websiteDataStore = .nonPersistent()
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -94,9 +94,9 @@ private struct SignInWebView: NSViewRepresentable {
             self.onCaptured = onCaptured
         }
 
-        /// 観測通知だけに頼らない。macOS 26 以降、ネットワークプロセスが受け取った
-        /// `Set-Cookie` が WebView 側のストアへすぐ現れないことがあるため、
-        /// 取れるまで一定間隔でも確かめる。
+        /// Don't rely on change notifications alone. On macOS 26+, a `Set-Cookie` received by the
+        /// network process can take a while to show up in the WebView's own store,
+        /// so also poll at a fixed interval until it can be read.
         func start(watching store: WKHTTPCookieStore) {
             self.store = store
             let timer = Timer(timeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -138,7 +138,7 @@ private struct SignInWebView: NSViewRepresentable {
                     self.finish(with: value)
                     return
                 }
-                // 確認中に次のtickが走らないよう先に止める。失敗したら再開する。
+                // Stop first so the next tick doesn't run while verifying. Resume if it fails.
                 self.checking = true
                 Task { @MainActor in
                     let ok = await verify(value)

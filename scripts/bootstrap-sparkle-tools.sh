@@ -1,5 +1,5 @@
 #!/bin/bash
-# Sparkleの配信用CLIを、公式release archiveから固定version/hashで準備する。
+# Prepares Sparkle's distribution CLI from the official release archive, at a pinned version/hash.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -13,7 +13,7 @@ DOWNLOAD_DIR="$TOOLS_ROOT/downloads"
 CACHED_ARCHIVE="$DOWNLOAD_DIR/$ARCHIVE_NAME"
 LOCK_DIR="$TOOLS_ROOT/.bootstrap.lock"
 
-# Archive hashの検証後に展開される3 binaryも固定する。
+# Also pins the 3 binaries extracted after the archive hash is verified.
 GENERATE_APPCAST_SHA256="b3b54ba3fb85ef1f25eb2f5a9ad90c32ba6e71af777b181c50ffb5d860bac6b7"
 SIGN_UPDATE_SHA256="bfb52400c3da18bb4c251ac4818c2c2e1e31c2e649a45b31c11109b6e57b34ad"
 GENERATE_KEYS_SHA256="2d18ed3a9c744e58150513d9b2e3c2eb76fd0b9621e3e4678d46dd972547e8fe"
@@ -31,10 +31,10 @@ usage() {
 Usage:
   ./scripts/bootstrap-sparkle-tools.sh
 
-Sparkle 2.9.6の公式tar.xzを固定SHA-256で検証し、次へ展開します。
+Verifies Sparkle 2.9.6's official tar.xz against a pinned SHA-256, then extracts it to:
   build/sparkle-tools/2.9.6/bin/
 
-このscriptはSparkle署名鍵を作成・export・表示しません。
+This script never creates, exports, or displays a Sparkle signing key.
 USAGE
 }
 
@@ -57,7 +57,7 @@ cleanup() {
   fi
 
   if [ "$LOCK_HELD" -eq 1 ] && ! rmdir "$LOCK_DIR"; then
-    printf 'error: Sparkle tool lockを解除できませんでした: %s\n' "$LOCK_DIR" >&2
+    printf 'error: could not release the Sparkle tool lock: %s\n' "$LOCK_DIR" >&2
     if [ "$script_status" -eq 0 ]; then
       script_status=1
     fi
@@ -81,7 +81,7 @@ esac
 
 for command_name in curl shasum tar codesign; do
   command -v "$command_name" >/dev/null 2>&1 \
-    || fail "必要なcommandがありません: $command_name"
+    || fail "missing required command: $command_name"
 done
 
 file_sha256() {
@@ -120,7 +120,7 @@ verify_installation() {
 
 mkdir -p "$TOOLS_ROOT"
 if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-  fail "別のSparkle tool準備が実行中です: $LOCK_DIR"
+  fail "another Sparkle tool preparation is running: $LOCK_DIR"
 fi
 LOCK_HELD=1
 
@@ -129,7 +129,7 @@ if [ -e "$INSTALL_DIR" ]; then
     printf 'Sparkle tools ready: %s\n' "$INSTALL_DIR/bin"
     exit 0
   fi
-  fail "既存のSparkle tool installationが固定hashと一致しません: $INSTALL_DIR"
+  fail "the existing Sparkle tool installation doesn't match the pinned hash: $INSTALL_DIR"
 fi
 
 mkdir -p "$DOWNLOAD_DIR"
@@ -151,14 +151,14 @@ else
     --output "$DOWNLOAD_TEMP" \
     "$ARCHIVE_URL"
   [ "$(file_sha256 "$DOWNLOAD_TEMP")" = "$ARCHIVE_SHA256" ] \
-    || fail "Sparkle archiveのSHA-256が固定値と一致しません"
+    || fail "the Sparkle archive's SHA-256 doesn't match the pinned value"
   chmod 644 "$DOWNLOAD_TEMP"
   mv -f "$DOWNLOAD_TEMP" "$CACHED_ARCHIVE"
   ARCHIVE_PATH="$CACHED_ARCHIVE"
 fi
 
 [ "$(file_sha256 "$ARCHIVE_PATH")" = "$ARCHIVE_SHA256" ] \
-  || fail "Sparkle archive cacheのSHA-256が固定値と一致しません"
+  || fail "the Sparkle archive cache's SHA-256 doesn't match the pinned value"
 
 STAGE_DIR="$WORK_DIR/stage"
 mkdir -p "$STAGE_DIR"
@@ -169,11 +169,11 @@ tar -xJf "$ARCHIVE_PATH" -C "$STAGE_DIR" \
   ./LICENSE
 
 verify_binary "$STAGE_DIR/bin/generate_appcast" "$GENERATE_APPCAST_SHA256" \
-  || fail "generate_appcastの検証に失敗しました"
+  || fail "generate_appcast verification failed"
 verify_binary "$STAGE_DIR/bin/sign_update" "$SIGN_UPDATE_SHA256" \
-  || fail "sign_updateの検証に失敗しました"
+  || fail "sign_update verification failed"
 verify_binary "$STAGE_DIR/bin/generate_keys" "$GENERATE_KEYS_SHA256" \
-  || fail "generate_keysの検証に失敗しました"
+  || fail "generate_keys verification failed"
 
 STAMP_TEMP="$STAGE_DIR/toolchain-stamp.txt.tmp"
 {
@@ -188,6 +188,6 @@ STAMP_TEMP="$STAGE_DIR/toolchain-stamp.txt.tmp"
 chmod 644 "$STAMP_TEMP"
 mv "$STAMP_TEMP" "$STAGE_DIR/toolchain-stamp.txt"
 
-# INSTALL_DIRはこの時点では存在しない。完成したdirectoryだけを一度に公開する。
+# INSTALL_DIR doesn't exist at this point. Only the finished directory is published, all at once.
 mv "$STAGE_DIR" "$INSTALL_DIR"
 printf 'Sparkle tools ready: %s\n' "$INSTALL_DIR/bin"

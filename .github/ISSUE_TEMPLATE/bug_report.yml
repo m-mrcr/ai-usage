@@ -1,5 +1,5 @@
 name: Bug report
-description: AI Usageの不具合を報告する
+description: Report a problem with AI Usage
 title: "[Bug] "
 labels:
   - bug
@@ -7,14 +7,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        セキュリティ上の問題は公開Issueへ書かず、SECURITY.mdの非公開報告手順を利用してください。
-        OAuth token、Keychain内容、完全なJSONL、statusline-raw.log、snapshot、settings.jsonは添付しないでください。
+        For security issues, please don't write in a public issue — use the private reporting process in SECURITY.md instead.
+        Do not attach OAuth tokens, Keychain contents, complete JSONL logs, statusline-raw.log, snapshots, or settings.json.
 
   - type: input
     id: app-version
     attributes:
       label: AI Usage version
-      description: AI Usageのversionとbuild番号を記載してください。
+      description: Please provide the AI Usage version and build number.
       placeholder: 1.2.3 (45)
     validations:
       required: true
@@ -30,36 +30,36 @@ body:
   - type: dropdown
     id: surface
     attributes:
-      label: 発生箇所
+      label: Where it happens
       options:
-        - メニューバー
-        - ウィジェット
-        - 設定
-        - インストール・更新
-        - データ取得
-        - その他
+        - Menu bar
+        - Widget
+        - Settings
+        - Install/update
+        - Data collection
+        - Other
     validations:
       required: true
 
   - type: textarea
     id: summary
     attributes:
-      label: 症状と再現手順
-      description: 秘密情報、会話本文、個人パスを除き、最小限の手順を記載してください。
+      label: Symptoms and reproduction steps
+      description: Please describe the minimal steps to reproduce, excluding secrets, conversation content, and personal paths.
     validations:
       required: true
 
   - type: textarea
     id: expected
     attributes:
-      label: 期待した結果
+      label: Expected result
     validations:
       required: true
 
   - type: checkboxes
     id: sensitive-data
     attributes:
-      label: 公開前の確認
+      label: Pre-submission check
       options:
-        - label: OAuth token、Keychain内容、生ログ、snapshot、個人パスを含めていません。
+        - label: I have not included OAuth tokens, Keychain contents, raw logs, snapshots, or personal paths.
           required: true

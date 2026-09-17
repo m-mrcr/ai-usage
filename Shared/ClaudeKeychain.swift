@@ -1,11 +1,11 @@
 import Foundation
 import Security
 
-/// Claude Code が Keychain に保存している OAuth トークンを読む。
+/// Reads the OAuth token Claude Code stores in Keychain.
 ///
-/// 読むのは利用者本人のトークンで、送り先は Anthropic の usage エンドポイントのみ。
-/// Claude Code の `/usage` と同じことをアプリ側から行うための入口。
-/// 読み書きは Claude Code と同じく `/usr/bin/security` を通す（理由は `KeychainTool`）。
+/// What's read is the user's own token, and it's only ever sent to Anthropic's usage endpoint.
+/// An entry point for doing the same thing as Claude Code's `/usage` from this app.
+/// Reads and writes go through `/usr/bin/security`, same as Claude Code (see `KeychainTool` for why).
 enum ClaudeKeychain {
     struct OAuthCredential: Sendable {
         let accessToken: String
@@ -21,8 +21,8 @@ enum ClaudeKeychain {
         case accessDenied
         case malformed
         case expired
-        /// 項目はあるが `claudeAiOauth` が無い。デスクトップ版Claudeだけを使うと
-        /// 同じ項目へ `mcpOAuth` しか書かれず、この状態になる。
+        /// The item exists but has no `claudeAiOauth`. Using only the desktop Claude app
+        /// writes only `mcpOAuth` into the same item, producing this state.
         case notLinked
     }
 
@@ -54,11 +54,11 @@ enum ClaudeKeychain {
         let data: Data
     }
 
-    /// Keychain項目の中身の種類。
+    /// The kind of content inside the Keychain item.
     ///
-    /// 同じ項目をターミナル版CLI（`claudeAiOauth`）とデスクトップ版のMCP OAuth
-    /// （`mcpOAuth`）が共有するため、「壊れている」と「CLIがまだ書いていない」を
-    /// 取り違えると案内が的外れになる。読み取り前にここで分ける。
+    /// The terminal CLI (`claudeAiOauth`) and the desktop app's MCP OAuth (`mcpOAuth`)
+    /// share the same item, so confusing "it's broken" with "the CLI hasn't written yet"
+    /// would give misleading guidance. Distinguish them here before reading.
     enum PayloadShape: Sendable, Equatable {
         case usable
         case notLinked
@@ -72,9 +72,9 @@ enum ClaudeKeychain {
         return oauth is [String: Any] ? .usable : .malformed
     }
 
-    /// `~/.claude.json` に `oauthAccount` があれば、どこかでClaudeへログイン済み。
-    /// CLIトークンが無い理由が「未ログイン」なのか「CLIを一度も使っていない」なのかを
-    /// 切り分けて、案内先をターミナルログインに寄せるために使う。
+    /// If `~/.claude.json` has `oauthAccount`, the user is signed in to Claude somewhere.
+    /// Used to distinguish whether the missing CLI token means "not signed in" or "the CLI
+    /// has never been used", so guidance can be steered toward a terminal sign-in.
     static func hasSignedInAccount() -> Bool {
         let url = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude.json")
@@ -84,12 +84,12 @@ enum ClaudeKeychain {
         return root["oauthAccount"] is [String: Any]
     }
 
-    /// ターミナル版CLIが入っているか。
+    /// Whether the terminal CLI is installed.
     ///
-    /// CLIが居るならトークンの更新はCLIに任せ、こちらは読むだけにする。
-    /// refresh tokenは更新のたびに回転するので、2か所から更新すると片方が
-    /// 使えなくなった古いtokenを掴みうる。
-    /// デスクトップ版が内包するバイナリは対象外。
+    /// If the CLI is present, leave refreshing the token to it and only read here.
+    /// The refresh token rotates on every refresh, so if two places refresh it,
+    /// one of them can end up holding a stale, unusable token.
+    /// The binary bundled inside the desktop app doesn't count.
     static func terminalCLIInstalled() -> Bool {
         let manager = FileManager.default
         return terminalCLISearchPaths().contains {
@@ -97,13 +97,13 @@ enum ClaudeKeychain {
         }
     }
 
-    /// `claude` を探すディレクトリ。
-    /// npmのglobal installはnvm/fnm配下へ入ることがあるため、固定パスだけでは足りない。
+    /// Directories to search for `claude`.
+    /// An npm global install can land under nvm/fnm, so fixed paths alone aren't enough.
     static func terminalCLISearchPaths() -> [URL] {
         CLILocator.searchPaths()
     }
 
-    /// 契約プラン名（"max" など）。無い版もあるので任意項目として扱う。
+    /// The subscription plan name (e.g. "max"). Some versions don't have it, so it's treated as optional.
     static func subscriptionType() -> String? {
         switch credentialState() {
         case let .valid(credential), let .refreshable(credential):
@@ -117,14 +117,14 @@ enum ClaudeKeychain {
         credential()?.accessToken
     }
 
-    /// 有効なaccess tokenだけを返す互換API。
+    /// A compatibility API that only returns a valid access token.
     static func credential() -> OAuthCredential? {
         guard case let .valid(credential) = credentialState() else { return nil }
         return credential
     }
 
-    /// Keychainの読取失敗と、更新可能な期限切れを区別する。
-    /// Claude Codeと同様に期限の5分前からrefresh対象にする。
+    /// Distinguishes a Keychain read failure from a refreshable expiration.
+    /// As with Claude Code, becomes refresh-eligible starting 5 minutes before expiry.
     static func credentialState(
         now: Date = Date(), refreshSkew: TimeInterval = 5 * 60
     ) -> CredentialState {
@@ -159,8 +159,8 @@ enum ClaudeKeychain {
         return .valid(credential)
     }
 
-    /// refresh tokenを回転させる前に、同じKeychain itemへ安全に書き戻せることを確認する。
-    /// 同じdataを書くだけなので、失敗時はOAuth refreshを開始しない。
+    /// Before rotating the refresh token, confirm it's safe to write back to the same Keychain item.
+    /// This just writes back the same data, so on failure, never start the OAuth refresh.
     static func prepareForRefresh(_ expected: OAuthCredential) -> Bool {
         let (status, item) = readRawItem()
         guard status == errSecSuccess, let item,
@@ -170,8 +170,8 @@ enum ClaudeKeychain {
         return writeRawItem(item.data) == errSecSuccess
     }
 
-    /// Claude Codeのrefresh tokenは回転するため、access/refresh両方が読取時と一致する場合だけ
-    /// 未知fieldを残したままKeychainへ書き戻す。競合時は新しい兄弟書込みを採用する。
+    /// Since Claude Code's refresh token rotates, only write back to Keychain — preserving unknown
+    /// fields — when both the access and refresh tokens still match what was read. On conflict, defer to the newer sibling write.
     static func saveRefreshedCredential(
         expected: OAuthCredential,
         accessToken: String,
@@ -214,7 +214,7 @@ enum ClaudeKeychain {
         return .failed
     }
 
-    /// 明示的な拒否・キャンセルや項目削除は再試行せず、確認dialogの連続表示を避ける。
+    /// Don't retry on an explicit denial/cancellation or a deleted item, to avoid a string of repeated confirmation dialogs.
     static func shouldRetryReadFailure(_ status: OSStatus) -> Bool {
         ![
             errSecItemNotFound,
@@ -224,7 +224,7 @@ enum ClaudeKeychain {
         ].contains(status)
     }
 
-    /// JSON mergeの純粋部分。Keychainのsibling keysと将来fieldを消さない。
+    /// The pure part of the JSON merge. Never drops Keychain's sibling keys or future fields.
     static func updatedCredentialData(
         _ data: Data,
         expectedAccessToken: String,
@@ -313,14 +313,14 @@ enum ClaudeKeychain {
         return (status, KeychainItem(data: data))
     }
 
-    /// Claude Codeと同じ `add-generic-password -U` で上書きする。
-    /// serviceとmacOS usernameで項目を1件に固定するのもClaude Codeと同じ。
+    /// Overwrites with `add-generic-password -U`, same as Claude Code.
+    /// Pinning the item to one via service and macOS username also matches Claude Code.
     private static func writeRawItem(_ data: Data) -> OSStatus {
         KeychainTool.write(data, service: service, account: NSUserName())
     }
 
-    /// User-Agent 用。`claude-code/<version>` でないと厳しい 429 バケットに落ちるため、
-    /// 実際にこのマシンで動いている Claude Code のバージョンを転写する。
+    /// For the User-Agent. Without `claude-code/<version>` it falls into a strict 429 bucket,
+    /// so this transcribes the actual version of Claude Code running on this machine.
     static func installedVersion() -> String {
         let projects = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent(".claude/projects", isDirectory: true)
@@ -349,7 +349,7 @@ enum ClaudeKeychain {
         return fallbackVersion
     }
 
-    /// 先頭から上限バイトまで読む。上限を超えるファイルは扱わない。
+    /// Reads from the start up to a byte limit. Files exceeding the limit are not handled.
     private static func readBoundedFile(at url: URL, maximumBytes: Int) -> Data? {
         guard maximumBytes >= 0, maximumBytes < Int.max,
               let handle = try? FileHandle(forReadingFrom: url)
@@ -362,7 +362,7 @@ enum ClaudeKeychain {
         return data
     }
 
-    /// オフセットが UTF-8 の途中に入っても、最初の不完全な行を捨てて行境界から返す。
+    /// Even if the offset lands mid-UTF-8, discards the first incomplete line and returns from a line boundary.
     private static func readTail(of url: URL, maximumBytes: Int) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }

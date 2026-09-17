@@ -23,9 +23,9 @@ final class ClaudeKeychainTests: XCTestCase {
     }
 
     func testPayloadShapeSeparatesAnMcpOnlyItemFromMalformedData() throws {
-        // デスクトップ版Claudeだけを使うと、同じKeychain項目に mcpOAuth しか入らない。
-        // これを malformed と同じ扱いにすると案内が「再ログイン」になり、実際に必要な
-        // ターミナルログインへ辿り着けない。
+        // Using only the desktop Claude app leaves only mcpOAuth in the same Keychain item.
+        // Treating this the same as malformed would give "sign in again" guidance, when what's
+        // actually needed is a terminal sign-in — and the user would never get there.
         let mcpOnly = try JSONSerialization.data(
             withJSONObject: ["mcpOAuth": ["server": ["accessToken": "value"]]]
         )
@@ -47,27 +47,27 @@ final class ClaudeKeychainTests: XCTestCase {
         XCTAssertEqual(ClaudeKeychain.payloadShape(wrongType), .malformed)
     }
 
-    /// CLIが居る間はトークン更新をCLIに任せる（refresh tokenは回転するため、
-    /// 2か所から更新すると片方が古いtokenを掴みうる）。デスクトップ版が内包する
-    /// バイナリは更新役にならないので、これをCLIと誤認すると更新役が誰も居なくなる。
+    /// While the CLI is present, token refresh is left to it (since the refresh token rotates,
+    /// refreshing from two places could leave one holding a stale token). The binary bundled
+    /// inside the desktop app never acts as the refresher, so mistaking it for the CLI would leave no refresher at all.
     func testTerminalCLIDetectionIgnoresTheDesktopBundledBinary() {
         let bundledRoot = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/Claude").path
 
         XCTAssertFalse(
             ClaudeKeychain.terminalCLISearchPaths().contains { $0.path.hasPrefix(bundledRoot) },
-            "デスクトップ版の内包バイナリを探索対象に含めてはいけない"
+            "The desktop app's bundled binary must not be included in the search targets"
         )
     }
 
-    /// npmのglobal installはnvm/fnm配下へ入ることがあり、固定パスだけでは取りこぼす。
-    /// 取りこぼすと「CLIが居ない」と誤判定して書き戻し、CLIを締め出してしまう。
+    /// An npm global install can land under nvm/fnm, and fixed paths alone would miss it.
+    /// Missing it would misjudge "the CLI isn't present" and write back, locking the CLI out.
     func testTerminalCLIDetectionCoversVersionManagerLayouts() {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let paths = ClaudeKeychain.terminalCLISearchPaths().map(\.path)
 
         for fixed in ["/opt/homebrew/bin", "/usr/local/bin"] {
-            XCTAssertTrue(paths.contains(fixed), "\(fixed) を探索対象に含めるべき")
+            XCTAssertTrue(paths.contains(fixed), "\(fixed) should be included in the search targets")
         }
 
         let nvmRoot = home.appendingPathComponent(".nvm/versions/node")
@@ -77,7 +77,7 @@ final class ClaudeKeychainTests: XCTestCase {
         for version in nvmVersions.prefix(64) {
             XCTAssertTrue(
                 paths.contains(version.appendingPathComponent("bin").path),
-                "nvm配下の \(version.lastPathComponent) を探索対象に含めるべき"
+                "\(version.lastPathComponent) under nvm should be included in the search targets"
             )
         }
 

@@ -174,8 +174,8 @@ final class UsageModelsTests: XCTestCase {
         XCTAssertEqual(window.usedPercent, 0)
     }
 
-    /// claude.ai 経路ではプランが応答に無く、ログイン記録の `claude_pro` から拾う。
-    /// 接頭辞を落として既知の等級へ寄せられることを固定する。
+    /// On the claude.ai route, the plan isn't in the response, so it's pulled from the sign-in record's `claude_pro`.
+    /// Locks in that dropping the prefix maps it to a known tier.
     func testPlanLabelNormalizesTheLocalAccountOrganizationType() {
         XCTAssertEqual(PlanLabel.normalize("claude_pro"), "Pro")
         XCTAssertEqual(PlanLabel.normalize("claude_max"), "Max")
@@ -246,6 +246,35 @@ final class UsageModelsTests: XCTestCase {
         XCTAssertEqual(AppLanguage.japanese.locale.region?.identifier, currentRegion)
         XCTAssertEqual(AppLanguage.english.locale.language.languageCode?.identifier, "en")
         XCTAssertEqual(AppLanguage.japanese.locale.language.languageCode?.identifier, "ja")
+    }
+
+    /// The existing Codable round-trip stays unchanged even with the new fields present.
+    func testAgentUsageRoundTripsResetCreditsAndExtraUsage() throws {
+        var codex = agent(id: "codex", percent: 40, status: .ok, short: true)
+        codex.resetCredits = ResetCredits(available: 2)
+        var claude = agent(id: "claude-code", percent: 10, status: .ok, short: true)
+        claude.extraUsage = ExtraUsage(used: 5.16, limit: 20)
+
+        let encoder = JSONEncoder()
+        let decoder = JSONDecoder()
+
+        let decodedCodex = try decoder.decode(AgentUsage.self, from: try encoder.encode(codex))
+        XCTAssertEqual(decodedCodex.resetCredits, ResetCredits(available: 2))
+        XCTAssertNil(decodedCodex.extraUsage)
+
+        let decodedClaude = try decoder.decode(AgentUsage.self, from: try encoder.encode(claude))
+        XCTAssertEqual(decodedClaude.extraUsage, ExtraUsage(used: 5.16, limit: 20))
+        XCTAssertNil(decodedClaude.resetCredits)
+    }
+
+    /// An old snapshot missing the new fields is also readable as nil, without error.
+    func testAgentUsageDecodesOldSnapshotsMissingTheNewFields() throws {
+        let json = """
+        {"id":"codex","name":"Codex","windows":[],"source":"test","status":"ok"}
+        """
+        let decoded = try JSONDecoder().decode(AgentUsage.self, from: Data(json.utf8))
+        XCTAssertNil(decoded.resetCredits)
+        XCTAssertNil(decoded.extraUsage)
     }
 
     private func agent(

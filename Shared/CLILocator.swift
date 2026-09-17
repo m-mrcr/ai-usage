@@ -1,11 +1,11 @@
 import Foundation
 
-/// PATH に頼らずコマンドの実体を探す。
+/// Locates a command's actual executable without relying on PATH.
 ///
-/// Finder から起動したアプリはシェルの初期化ファイルが通した PATH を受け取らない。
-/// よく使われるインストール先を直接見に行く。
+/// An app launched from Finder doesn't inherit the PATH set up by shell init files.
+/// Looks directly in commonly used install locations instead.
 enum CLILocator {
-    /// 版ごとに bin を持つ管理ツールで、走査が際限なく増えないようにする上限。
+    /// A cap so scanning doesn't grow without bound for version managers that keep a bin per version.
     private static let versionLimit = 64
 
     static func searchPaths() -> [URL] {
@@ -20,7 +20,7 @@ enum CLILocator {
             "Library/pnpm",
         ].map(home.appendingPathComponent)
 
-        // nvm/fnm はNodeのversionごとにbinを持つため、1段だけ展開する。
+        // nvm/fnm keep a bin per Node version, so expand just one level.
         for (root, suffix) in [
             (home.appendingPathComponent(".nvm/versions/node"), "bin"),
             (home.appendingPathComponent(".fnm/node-versions"), "installation/bin"),

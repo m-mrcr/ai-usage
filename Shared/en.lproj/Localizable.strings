@@ -145,6 +145,11 @@
 "widget.empty.unavailable.detail" = "Open AI Usage for details.";
 "widget.empty.noData.title" = "No usage data";
 "widget.empty.noData.detail" = "Open AI Usage to refresh.";
+"widget.resetCredits.none" = "No resets";
+"widget.resetCredits.one" = "1 reset";
+"widget.resetCredits.other.format" = "%d resets";
+"widget.extraUsage.format" = "%1$@ / %2$@";
+"widget.extraUsage.off" = "Extra usage off";
 
 "source.billingLog" = "billing log";
 "source.codexCLI" = "Codex CLI";

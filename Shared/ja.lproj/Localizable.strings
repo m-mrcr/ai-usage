@@ -145,6 +145,11 @@
 "widget.empty.unavailable.detail" = "詳しくはAI Usageを開いてください。";
 "widget.empty.noData.title" = "使用量データがありません";
 "widget.empty.noData.detail" = "AI Usageを開いて更新してください。";
+"widget.resetCredits.none" = "リセットなし";
+"widget.resetCredits.one" = "リセット1回";
+"widget.resetCredits.other.format" = "リセット%d回";
+"widget.extraUsage.format" = "%1$@ / %2$@";
+"widget.extraUsage.off" = "Extra usage オフ";
 
 "source.billingLog" = "billing log";
 "source.codexCLI" = "Codex CLI";

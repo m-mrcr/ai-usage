@@ -1,19 +1,19 @@
 import Foundation
 
-/// Codex の残量。
+/// Codex's remaining allowance.
 ///
-/// Codex はセッションログ（~/.codex/sessions/**/rollout-*.jsonl）に `rate_limits`
-/// を自動で書き残す。フックの導入も API 呼び出しも不要で、最新のものを読むだけで良い。
+/// Codex automatically writes `rate_limits` into its session log
+/// (~/.codex/sessions/**/rollout-*.jsonl). No hook install or API call is needed — just read the latest one.
 enum CodexCollector {
     private static let sessionsRoot = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent(".codex/sessions", isDirectory: true)
 
-    /// 各ファイルの末尾だけを見る。rate_limits は頻繁に書かれるので十分。
+    /// Only looks at the tail of each file. rate_limits is written often, so this is enough.
     private static let tailBytes = 2 * 1_024 * 1_024
 
     static func collect(force: Bool = false) -> AgentUsage {
-        // 公式クライアントに直接聞けるならそれが常に最新。ログは使った分しか増えない。
-        let live = CodexAppServer.observations(force: force)
+        // If the official client can be asked directly, that's always the freshest. The log only grows with actual use.
+        let live = CodexAppServer.snapshot(force: force)
         let hasLogs = FileManager.default.fileExists(atPath: sessionsRoot.path)
         guard live != nil || hasLogs || CodexAppServer.isAvailable else {
             return AgentUsage(id: "codex", name: "Codex", plan: nil, windows: [],
@@ -22,7 +22,7 @@ enum CodexCollector {
         }
 
         let source = live == nil ? logSource : liveSource
-        let observations = live ?? latestObservations()
+        let observations = live?.observations ?? latestObservations()
         guard let hit = selectBucket(from: observations) else {
             return AgentUsage(
                 id: "codex", name: "Codex",
@@ -36,7 +36,7 @@ enum CodexCollector {
         }
 
         var windows = usableWindows(of: hit.limits)
-        // モデル別枠も一覧には出す。ただし代表値には使わない（補助枠）。
+        // Per-model windows are shown in the list too, but never used as the representative value (supplementary).
         for other in observations where !other.isPlanBucket {
             windows.append(contentsOf: usableWindows(of: other.limits, supplementary: true))
         }
@@ -50,15 +50,17 @@ enum CodexCollector {
             observedAt: hit.observedAt,
             source: source,
             status: windows.isEmpty ? .unavailable : (isStale ? .stale : .ok),
-            note: nil
+            note: nil,
+            // A value only known via the live route. Stays nil on the log-only fallback (no row is shown).
+            resetCredits: live?.resetCreditsAvailable.map(ResetCredits.init(available:))
         )
     }
 
-    /// 取得元。どちらから読めたかで案内が変わるので、表示にも残す。
+    /// The source. Guidance differs depending on which one was readable, so this is kept for display too.
     static let liveSource = "Codex CLI"
     static let logSource = "session log"
 
-    // MARK: - JSON 形状
+    // MARK: - JSON shape
 
     struct RateLimits: Decodable {
         struct Window: Decodable {
@@ -69,19 +71,19 @@ enum CodexCollector {
         let primary: Window?
         let secondary: Window?
         let plan_type: String?
-        /// Codexはプラン枠とモデル別枠を同じログへ別レコードとして書く。
-        /// 例: プラン枠は "codex"、GPT-5.3-Codex-Sparkは "codex_bengalfox"。
+        /// Codex writes the plan window and per-model windows as separate records in the same log.
+        /// e.g. the plan window is "codex", GPT-5.3-Codex-Spark is "codex_bengalfox".
         let limit_id: String?
         let limit_name: String?
     }
 
-    /// 1バケット分の最新観測。
+    /// The latest observation for one bucket.
     struct Observation {
         let limits: RateLimits
         let observedAt: Date
 
         var bucketKey: String { limits.limit_id ?? "" }
-        /// プラン全体の枠。モデル別枠と取り違えると、使っていないモデルの0%を出してしまう。
+        /// The plan-wide window. Confusing it with a per-model window would show 0% for an unused model.
         var isPlanBucket: Bool {
             guard let id = limits.limit_id else { return true }
             return id == planLimitID
@@ -134,8 +136,8 @@ enum CodexCollector {
         return windows
     }
 
-    /// "GPT-5.3-Codex-Spark" のような表示名は長すぎるので末尾だけ使う。
-    /// 名前が無い版では `codex_bengalfox` のような内部idから接頭辞を落として使う。
+    /// A display name like "GPT-5.3-Codex-Spark" is too long, so only the last segment is used.
+    /// On a version with no name, an internal id like `codex_bengalfox` is used with the prefix dropped.
     static func shortBucketName(of limits: RateLimits) -> String? {
         if let name = limits.limit_name, !name.isEmpty {
             return name.split(separator: "-").last.map(String.init) ?? name
@@ -146,26 +148,27 @@ enum CodexCollector {
             : id
     }
 
-    /// 表示するバケットを決める。プラン枠だけを採り、モデル別枠は採らない。
+    /// Decides which bucket to show. Takes only the plan window, never a per-model one.
     ///
-    /// 「最後に書かれた1件」を採ると、直前に使ったモデル次第でプラン枠とモデル別枠が
-    /// 入れ替わる。モデル別枠は使っていなければ0%のままなので、代わりに出すと
-    /// 「余裕がある」と誤読させる。プラン枠が無いときは数字を出さず、その旨を伝える。
-    /// `limit_id`が無い旧形式のCodexもプラン枠として扱う。
+    /// Taking "whichever was written last" would flip between the plan window and a per-model
+    /// window depending on which model was used most recently. An unused per-model window stays
+    /// at 0%, so showing it instead would misleadingly suggest plenty of room. When there's no
+    /// plan window, no number is shown and that fact is reported instead.
+    /// An old-format Codex with no `limit_id` is also treated as a plan window.
     static func selectBucket(from observations: [Observation]) -> Observation? {
         observations
             .filter { $0.isPlanBucket && !usableWindows(of: $0.limits).isEmpty }
             .max { $0.observedAt < $1.observedAt }
     }
 
-    /// プラン枠は無いがモデル別枠だけはある状態。「Codexを一度実行して」では的外れになる。
+    /// A state with no plan window but only per-model windows. "Run Codex once" would be the wrong advice here.
     static func hasOnlyModelBuckets(_ observations: [Observation]) -> Bool {
         !observations.isEmpty && observations.allSatisfy { !$0.isPlanBucket }
     }
 
-    // MARK: - ログ走査
+    // MARK: - Log scanning
 
-    /// バケットごとに最新の観測を1件ずつ集める。
+    /// Collects the single latest observation per bucket.
     private static func latestObservations() -> [Observation] {
         var latest: [String: Observation] = [:]
         for file in recentSessionFiles() {
@@ -183,7 +186,7 @@ enum CodexCollector {
         return Array(latest.values)
     }
 
-    /// 更新が新しい順に最大 20 件。
+    /// Up to 20, most recently modified first.
     private static func recentSessionFiles() -> [URL] {
         let keys: [URLResourceKey] = [.contentModificationDateKey, .isRegularFileKey]
         guard let walker = FileManager.default.enumerator(
@@ -203,8 +206,8 @@ enum CodexCollector {
         return found.sorted { $0.1 > $1.1 }.prefix(20).map(\.0)
     }
 
-    /// ファイル末尾を後ろから読み、`limit_id` ごとに最新の rate_limits を1件ずつ取り出す。
-    /// 末尾1件だけを返すと、直前に使ったモデルのバケットに引きずられる。
+    /// Reads a file's tail backward and extracts the latest rate_limits for each `limit_id`.
+    /// Returning only the very last entry would get dragged toward whichever model's bucket was used most recently.
     static func scanTail(of url: URL) -> [(limits: RateLimits, observedAt: Date?)] {
         guard let data = readTail(of: url, maximumBytes: tailBytes) else { return [] }
 
@@ -221,7 +224,7 @@ enum CodexCollector {
                   let limits = findRateLimits(in: payload)
             else { continue }
 
-            // timestampが読めない行は捨てて更に遡るので、採用が確定してから既読にする。
+            // A line whose timestamp can't be read is discarded and scanning continues further back, so mark it as seen only once it's actually accepted.
             guard !seen.contains(limits.limit_id ?? "") else { continue }
 
             var observedAt: Date?
@@ -237,7 +240,7 @@ enum CodexCollector {
         return hits
     }
 
-    /// オフセットが UTF-8 の途中でも、先頭の不完全な行を捨てて残りを行単位で解析する。
+    /// Even if the offset lands mid-UTF-8, discards the leading incomplete line and parses the rest line by line.
     private static func readTail(of url: URL, maximumBytes: Int) -> Data? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
@@ -286,7 +289,7 @@ enum CodexCollector {
         return date
     }
 
-    /// rate_limits はイベント種別によって入れ子の深さが変わるので再帰で探す。
+    /// The nesting depth of rate_limits varies by event type, so this searches recursively.
     static func findRateLimits(in object: Any) -> RateLimits? {
         var remainingNodes = 2_048
         return findRateLimits(in: object, depth: 0, remainingNodes: &remainingNodes)

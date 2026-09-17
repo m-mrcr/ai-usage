@@ -32,8 +32,8 @@ settings:
     ENABLE_HARDENED_RUNTIME: YES
 
 targets:
-  # メニューバー常駐アプリ。~/.codex などを読むため非サンドボックス。
-  # 収集結果を App Group コンテナに書き、ウィジェットへ渡す。
+  # Resident menu bar app. Unsandboxed because it reads things like ~/.codex.
+  # Writes collection results to the App Group container and passes them to the widget.
   AIUsage:
     type: application
     platform: macOS
@@ -53,8 +53,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: jp.co.forestx.aiusage
-        # ターゲット名は AIUsage のままにして、成果物の名前だけ空白入りにする。
-        # スキーム名やビルドパスに空白を持ち込まずに済む。
+        # Keep the target name as AIUsage, and only give the built product a name with a space.
+        # This avoids introducing a space into the scheme name or build paths.
         PRODUCT_NAME: AI Usage
         CODE_SIGN_ENTITLEMENTS: App/AIUsage.entitlements
         GENERATE_INFOPLIST_FILE: YES
@@ -75,14 +75,14 @@ targets:
         SURequireSignedFeed: true
         SUScheduledCheckInterval: 86400
 
-  # WidgetKit 拡張。macOS の要件でサンドボックス必須なので、
-  # 自前でログを読まず App Group 経由の snapshot だけを描画する。
+  # WidgetKit extension. macOS requires it to be sandboxed, so it never reads
+  # logs itself and only renders a snapshot passed via the App Group.
   AIUsageWidget:
     type: app-extension
     platform: macOS
     sources:
       - Widget
-      # Widgetは公開snapshotのモデルと描画だけを持ち、Keychain/API/log collectorを含めない。
+      # The widget only has the public snapshot's model and rendering; it never includes Keychain/API/log collectors.
       - Shared/UsageModels.swift
       - Shared/SnapshotStore.swift
       - Shared/UsageFormatting.swift
@@ -90,7 +90,7 @@ targets:
       - Shared/AppLanguage.swift
       - Shared/en.lproj/Localizable.strings
       - Shared/ja.lproj/Localizable.strings
-      # ギャラリーが拡張側のアイコンを引くことがあるので、本体と同じものを持たせる。
+      # The widget gallery can pull the extension's own icon, so give it the same one as the main app.
       - App/Assets.xcassets
     settings:
       base:
@@ -103,7 +103,7 @@ targets:
     info:
       path: Widget/Info.plist
       properties:
-        # ギャラリーの見出しはこの名前を拾うので、アプリ名と揃える。
+        # The gallery heading picks up this name, so keep it matching the app name.
         CFBundleName: AI Usage
         CFBundleDisplayName: AI Usage
         CFBundleShortVersionString: $(MARKETING_VERSION)
@@ -131,9 +131,12 @@ targets:
       - Shared/GrokBotCollector.swift
       - Shared/ClaudeWebUsageAPI.swift
       - Shared/ClaudeUsageAPI.swift
+      - Shared/ClaudeExtraUsageAPI.swift
       - Shared/ClaudeOAuthRefresher.swift
       - Shared/SnapshotStore.swift
       - Shared/AppLanguage.swift
+      - Shared/UsageFormatting.swift
+      - Shared/UsageBar.swift
       - Shared/en.lproj/Localizable.strings
       - Shared/ja.lproj/Localizable.strings
     settings:

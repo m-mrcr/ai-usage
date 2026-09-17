@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 struct UsagePopoverView: View {
     @ObservedObject var model: UsageModel
-    /// 常駐のみのモードではアプリメニューが無いので、ポップオーバーだけが終了手段になる。
-    /// ウィンドウは Dock モードでしか開かず、標準のアプリメニューと Cmd+Q があるため不要。
+    /// In resident-only mode there's no app menu, so the popover is the only way to quit.
+    /// The window only opens in Dock mode, which has the standard app menu and Cmd+Q, so it's unneeded there.
     var showsQuit: Bool = true
 
     private var visibleAgents: [AgentUsage] { model.orderedAgents }
@@ -191,7 +191,7 @@ struct UsagePopoverView: View {
         .padding(.vertical, 10)
     }
 
-    /// 取得処理そのものが動いているかを、絶対時刻で確認できるようにする。
+    /// Lets you confirm from an absolute time whether the collection process itself is actually running.
     private var footer: some View {
         HStack {
             Text(checkedText)
@@ -227,7 +227,7 @@ struct UsagePopoverView: View {
 
 }
 
-/// 掴んでいるカードの上を通ると、その場で並びが入れ替わって着地点が見える。
+/// Passing over another card while dragging swaps the order right there, so you can see where it will land.
 struct ReorderDropDelegate: DropDelegate {
     let targetID: String
     let model: UsageModel
@@ -265,7 +265,7 @@ struct AgentRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 9) {
-            // ウィジェットと同じく左の色帯で所属を示す。
+            // Shows which agent this belongs to via a left color stripe, same as the widget.
             Capsule()
                 .fill(agent.accent)
                 .frame(width: 3)
@@ -367,10 +367,10 @@ struct AgentRow: View {
             }
 
             if let action = agent.attentionAction {
-                // 文字リンクだけだと押せることに気づかれない。
-                // 復帰に必要な2手（案内を読む／取り直す）をその場のボタンとして出す。
-                // 塗りつぶしのtintはpopoverの半透明背景と重なると文字が沈む。
-                // 地は既定のままにして、注意の色はアイコンだけに持たせる。
+                // A plain text link alone wouldn't be noticed as tappable.
+                // Surface the two actions needed to recover (read the guidance / check again) as buttons right here.
+                // A filled tint would sink the text when it overlaps the popover's translucent background.
+                // Keep the fill at its default and put the attention color only on the icon.
                 HStack(spacing: 6) {
                     Button(action: showStaleHelp) {
                         HStack(spacing: 4) {
@@ -409,8 +409,8 @@ private extension AgentUsage {
         let symbol: String
     }
 
-    /// 復帰操作が決まっている状態だけボタンを出す。
-    /// ターミナルログインが要る場合は、再ログインでは直らないので文言を分ける。
+    /// Only show a button for states that have a defined recovery action.
+    /// When a terminal sign-in is required, re-signing-in in the app won't fix it, so use different wording.
     var attentionAction: AttentionAction? {
         switch note {
         case "Claude usage needs a terminal Claude Code sign-in; run claude in Terminal, then check again",

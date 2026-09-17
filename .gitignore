@@ -7,7 +7,7 @@ __pycache__/
 AIUsage.xcodeproj/xcuserdata/
 AIUsage.xcodeproj/project.xcworkspace/xcuserdata/
 
-# 署名まわり。秘密鍵や資格情報は絶対にコミットしない。
+# Signing-related. Never commit private keys or credentials.
 *.p12
 *.pfx
 *.p8

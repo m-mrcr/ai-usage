@@ -22,15 +22,15 @@ extension UsageWindow {
 }
 
 extension AgentUsage {
-    /// エージェントの識別色。バーの色は逼迫度を表すので、識別はドットで行う。
+    /// The agent's identity color. Since the bar's color represents severity, identity is conveyed via the dot instead.
     ///
-    /// 各社の実際のブランドに合わせる。直感的に結びつくことを優先し、
-    /// 見分けやすさのために存在しない色を割り当てることはしない。
+    /// Matched to each company's actual brand. Prioritizes intuitive association, and never
+    /// assigns a color that doesn't exist for a brand just to aid distinguishability.
     var accent: Color {
         switch id {
         case "claude-code": return Color(red: 0.85, green: 0.47, blue: 0.28)
         case "codex": return Color(red: 139 / 255, green: 124 / 255, blue: 246 / 255)
-        // Grokと Grok Bot は同じxAIのブランドで、どちらもモノクロ。同じ色で扱う。
+        // Grok and Grok Bot are the same xAI brand, both monochrome. Treated with the same color.
         case "grok", "grok-bot": return grokAccent
         case "gemini": return Color(red: 0.36, green: 0.62, blue: 0.98)
         case "cursor": return cursorAccent
@@ -38,7 +38,7 @@ extension AgentUsage {
         }
     }
 
-    /// Grokはモノクロ系のcool gray。ライト面では濃く、ダーク面では明るくして識別性を保つ。
+    /// Grok is a monochrome-family cool gray. Darker in light appearance, lighter in dark appearance, to preserve distinguishability.
     private var grokAccent: Color {
         Self.adaptive(
             name: "AIUsage.GrokAccent",
@@ -47,9 +47,9 @@ extension AgentUsage {
         )
     }
 
-    /// Cursorは完全な無彩色。公式アイコンは黒と白だけで構成されている。
-    /// Grokのcool grayより暗く（ライト面）、より明るく（ダーク面）して、
-    /// 同じモノクロ同士でも取り違えないようにする。
+    /// Cursor is fully achromatic. The official icon is made up of only black and white.
+    /// Made darker than Grok's cool gray (light appearance) and lighter (dark appearance),
+    /// so the two monochrome accents aren't mistaken for each other.
     private var cursorAccent: Color {
         Self.adaptive(
             name: "AIUsage.CursorAccent",
@@ -58,7 +58,7 @@ extension AgentUsage {
         )
     }
 
-    /// 明暗どちらの面でも読めるよう、外観に応じて色を差し替える。
+    /// Swaps the color based on appearance, so it stays legible in both light and dark.
     private static func adaptive(
         name: String,
         light: (Int, Int, Int),
@@ -79,4 +79,43 @@ extension AgentUsage {
 
 extension AgentStatus {
     var isActionable: Bool { self == .ok || self == .stale }
+}
+
+extension ResetCredits {
+    func summaryText(language: AppLanguage) -> String {
+        switch available {
+        case 0: return L10n.text("widget.resetCredits.none", language: language)
+        case 1: return L10n.text("widget.resetCredits.one", language: language)
+        default: return L10n.format("widget.resetCredits.other.format", language: language, available)
+        }
+    }
+}
+
+extension ExtraUsage {
+    /// The currency is fixed to Anthropic's billing unit (USD); only digit grouping follows the language setting.
+    func summaryText(language: AppLanguage) -> String {
+        L10n.format(
+            "widget.extraUsage.format", language: language,
+            Self.currencyText(used, language: language),
+            Self.currencyText(limit, language: language)
+        )
+    }
+
+    private static func currencyText(_ value: Double, language: AppLanguage) -> String {
+        value.formatted(
+            .currency(code: "USD").precision(.fractionLength(2)).locale(language.locale)
+        )
+    }
+}
+
+extension AgentUsage {
+    /// The widget's "EXTRAS" row. Reset credits for Codex, pay-as-you-go usage for Claude.
+    /// Only Claude also explicitly states "not fetched". This is a fixed slot meant to make
+    /// Codex/Claude comparable at a glance, so it avoids looking asymmetric with only one side's value disappearing.
+    func extrasText(language: AppLanguage) -> String? {
+        if let resetCredits { return resetCredits.summaryText(language: language) }
+        if let extraUsage { return extraUsage.summaryText(language: language) }
+        if id == "claude-code" { return L10n.text("widget.extraUsage.off", language: language) }
+        return nil
+    }
 }

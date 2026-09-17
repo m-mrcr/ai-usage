@@ -1,6 +1,6 @@
 import Foundation
 
-/// アプリ内ログインの対象。取り出す値と、その保存先だけが違う。
+/// A target for in-app sign-in. Only the extracted value and where it's saved differ.
 extension WebSignInView.Target {
     static var claude: WebSignInView.Target {
         WebSignInView.Target(
@@ -16,9 +16,9 @@ extension WebSignInView.Target {
         )
     }
 
-    /// Grok Bot と Cursor が共有する cursor.com のアカウント。
-    /// セッションCookieはHttpOnlyで名前が公になっていないため、名前を決め打ちせず、
-    /// 集めたCookieで実際に応答が返るかで成立を判定する。
+    /// The cursor.com account shared by Grok Bot and Cursor.
+    /// The session cookie is HttpOnly and its name isn't publicly documented, so instead of hardcoding a name,
+    /// success is judged by whether a real response comes back using the collected cookies.
     static var cursorAccount: WebSignInView.Target {
         WebSignInView.Target(
             loginURL: URL(string: "https://cursor.com/dashboard")!,

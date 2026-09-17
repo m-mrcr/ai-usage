@@ -6,7 +6,7 @@ struct UsageEntry: TimelineEntry {
     let date: Date
     let snapshot: UsageSnapshot
     let language: AppLanguage
-    /// 「ウィジェットを編集」で選ばれたエージェント。空なら本体の並び順に従う。
+    /// Agents chosen via "Edit Widget". If empty, follows the main app's order.
     let selectedIDs: [String]
 }
 
@@ -43,8 +43,8 @@ struct UsageProvider: AppIntentTimelineProvider {
                         policy: .after(Date().addingTimeInterval(10 * 60)))
     }
 
-    /// 拡張はサンドボックス内で ~/.codex を読めない。
-    /// 本体（メニューバーアプリ）が書き出した snapshot だけを読む。
+    /// The extension can't read ~/.codex inside its sandbox.
+    /// It only reads the snapshot written out by the main app (the menu bar app).
     private func current() -> UsageSnapshot {
         SnapshotStore.load()
     }
@@ -75,18 +75,18 @@ struct AIUsageWidget: Widget {
     }
 }
 
-/// 表示は一貫して「使用量（used）」。バーの伸びと色の濃さが同じ向きを指すようにする。
-/// 5 時間枠のような短い窓はセッション中に真っ先に効いてくるので、目立たせる。
+/// Display is consistently "used". The bar's fill and its color intensity should point the same direction.
+/// A short window like the 5-hour one kicks in first during a session, so it's given emphasis.
 struct UsageWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let snapshot: UsageSnapshot
     let language: AppLanguage
     var selectedIDs: [String] = []
 
-    /// 描ける行数の上限。中サイズに収まる限界。
+    /// The maximum number of rows that can be drawn. The limit that fits in the medium size.
     private static let maxRows = 4
 
-    /// 選択があればその順、無ければ本体の並び順。窓がない項目も空状態の説明に使う。
+    /// The selected order if there is one, otherwise the main app's order. Items with no windows are also used to explain the empty state.
     private var configuredAgents: [AgentUsage] {
         guard !selectedIDs.isEmpty else { return snapshot.agents }
         return selectedIDs.compactMap { id in snapshot.agents.first { $0.id == id } }
@@ -96,13 +96,13 @@ struct UsageWidgetView: View {
         configuredAgents.filter { !$0.windows.isEmpty }
     }
 
-    /// 上から詰めて 4 行で打ち切る。1 エージェントが複数の窓を持つので行数で数える。
+    /// Packs from the top and cuts off at 4 rows. Counted by row, since one agent can have multiple windows.
     private var visibleGroups: [(agent: AgentUsage, windows: [UsageWindow])] {
         var groups: [(AgentUsage, [UsageWindow])] = []
         var rows = 0
         for agent in orderedAgents {
             guard rows < Self.maxRows else { break }
-            // 行数に上限があるため、補助枠より先にプラン枠を採る。
+            // Since row count is capped, take plan windows before supplementary ones.
             let take = Array(agent.displayWindows.prefix(Self.maxRows - rows))
             guard !take.isEmpty else { continue }
             groups.append((agent, take))
@@ -111,7 +111,7 @@ struct UsageWidgetView: View {
         return groups
     }
 
-    /// 見出し。選択があれば先頭のエージェントを立てる。
+    /// The headline. If there's a selection, feature its first agent.
     private var headline: (agent: AgentUsage, window: UsageWindow)? {
         if !selectedIDs.isEmpty {
             guard let first = orderedAgents.first,
@@ -137,7 +137,7 @@ struct UsageWidgetView: View {
         .environment(\.locale, language.locale)
     }
 
-    // MARK: - 小: 5 時間枠を主役に
+    // MARK: - Small: feature the 5-hour window
 
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -205,7 +205,7 @@ struct UsageWidgetView: View {
 
                 Spacer(minLength: 0)
 
-                // 同じエージェントの長い窓は控えめに添える
+                // Show the same agent's longer window as a subtle addition
                 if let secondary = headlineSecondary {
                     Divider().padding(.vertical, 4)
                     HStack(spacing: 5) {
@@ -233,7 +233,7 @@ struct UsageWidgetView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    // MARK: - 中: エージェント単位でまとめる
+    // MARK: - Medium: group by agent
 
     private var medium: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -317,70 +317,84 @@ struct UsageWidgetView: View {
 
 }
 
-/// エージェント 1 つを 1 枚のカードにまとめる。
-/// 左の色帯と淡い背景で「どこからどこまでが同じアプリか」を一目で分かるようにする。
+/// Groups a single agent into one card.
+/// The left color stripe and faint background make it clear at a glance where one app's rows begin and end.
 struct AgentGroupRow: View {
     let agent: AgentUsage
-    /// 行数上限で絞り込んだあとの窓。呼び出し側が短い順に整えて渡す。
+    /// The windows after being narrowed down by the row cap. The caller passes them sorted shortest-first.
     let windows: [UsageWindow]
     let language: AppLanguage
 
-    var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            // 左の色帯。カードの高さいっぱいに伸ばして所属を示す。
-            Capsule()
-                .fill(agent.accent)
-                .frame(width: 3)
+    /// The name column's width. Used to wrap the EXTRAS row at the same position.
+    private static let leadingColumnWidth: CGFloat = 3 + 8 + 84 + 8
 
-            VStack(alignment: .leading, spacing: 1) {
-                HStack(spacing: 3) {
-                    Text(agent.name)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.75)
-                    if agent.displayStatus == .stale {
-                        Image(systemName: "clock.badge.exclamationmark")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.orange)
-                            .accessibilityLabel(
-                                L10n.text("widget.stale.accessibility", language: language)
-                            )
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .center, spacing: 8) {
+                // The left color stripe. Stretched the full height of the card to show which agent it belongs to.
+                Capsule()
+                    .fill(agent.accent)
+                    .frame(width: 3)
+
+                VStack(alignment: .leading, spacing: 1) {
+                    HStack(spacing: 3) {
+                        Text(agent.name)
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.75)
+                        if agent.displayStatus == .stale {
+                            Image(systemName: "clock.badge.exclamationmark")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.orange)
+                                .accessibilityLabel(
+                                    L10n.text("widget.stale.accessibility", language: language)
+                                )
+                        }
+                    }
+                    if let plan = agent.plan {
+                        Text(plan)
+                            .font(.system(size: 8))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                 }
-                if let plan = agent.plan {
-                    Text(plan)
-                        .font(.system(size: 8))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
+                .frame(width: 84, alignment: .leading)
+
+                VStack(spacing: 4) {
+                    ForEach(windows) { window in
+                        HStack(spacing: 6) {
+                            WindowChip(
+                                window: window,
+                                emphasized: window.isShortWindow,
+                                language: language
+                            )
+                            UsageBar(percent: window.usedPercent, height: 6, language: language)
+                            Text(window.usedText)
+                                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                                .foregroundStyle(.primary)
+                                .frame(width: 30, alignment: .trailing)
+                        }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            L10n.format(
+                                "widget.agentUsed.accessibility.format",
+                                language: language,
+                                L10n.windowLabel(window, language: language),
+                                window.usedText
+                            )
+                        )
+                    }
                 }
             }
-            .frame(width: 84, alignment: .leading)
 
-            VStack(spacing: 4) {
-                ForEach(windows) { window in
-                    HStack(spacing: 6) {
-                        WindowChip(
-                            window: window,
-                            emphasized: window.isShortWindow,
-                            language: language
-                        )
-                        UsageBar(percent: window.usedPercent, height: 6, language: language)
-                        Text(window.usedText)
-                            .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                            .foregroundStyle(.primary)
-                            .frame(width: 30, alignment: .trailing)
-                    }
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(
-                        L10n.format(
-                            "widget.agentUsed.accessibility.format",
-                            language: language,
-                            L10n.windowLabel(window, language: language),
-                            window.usedText
-                        )
-                    )
-                }
+            if let extras = agent.extrasText(language: language) {
+                Text(extras)
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                    .padding(.leading, Self.leadingColumnWidth)
             }
         }
         .padding(.vertical, 5)
@@ -394,7 +408,7 @@ struct AgentGroupRow: View {
 }
 
 extension UsageSnapshot {
-    /// ギャラリーのプレビュー用。
+    /// For the gallery preview.
     static let sample = UsageSnapshot(updatedAt: Date(), agents: [
         AgentUsage(id: "claude-code", name: "Claude Code", plan: "Max",
                    windows: [
@@ -405,14 +419,16 @@ extension UsageSnapshot {
                                    resetsAt: Date().addingTimeInterval(320_000),
                                    windowSeconds: 7 * 86_400),
                    ],
-                   observedAt: Date(), source: "usage API", status: .ok, note: nil),
+                   observedAt: Date(), source: "usage API", status: .ok, note: nil,
+                   extraUsage: ExtraUsage(used: 5.16, limit: 20)),
         AgentUsage(id: "codex", name: "Codex", plan: "Pro",
                    windows: [
                        UsageWindow(id: "w10080", label: "7d", usedPercent: 88,
                                    resetsAt: Date().addingTimeInterval(560_000),
                                    windowSeconds: 7 * 86_400),
                    ],
-                   observedAt: Date(), source: "session log", status: .ok, note: nil),
+                   observedAt: Date(), source: "session log", status: .ok, note: nil,
+                   resetCredits: ResetCredits(available: 2)),
         AgentUsage(id: "grok", name: "Grok", plan: "X Premium+",
                    windows: [
                        UsageWindow(id: "grok_period", label: "7d", usedPercent: 0,

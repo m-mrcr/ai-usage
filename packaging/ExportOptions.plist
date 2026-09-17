@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- App Store 外の直接配布。Gatekeeper を通すには公証まで必要。 -->
+	<!-- Direct distribution outside the App Store. Notarization is required to pass Gatekeeper. -->
 	<key>method</key>
 	<string>developer-id</string>
 	<key>teamID</key>

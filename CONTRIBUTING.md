@@ -1,5 +1,3 @@
-[English](CONTRIBUTING.md) | [日本語](CONTRIBUTING.ja.md)
-
 # Contributing to AI Usage
 
 Thank you for helping improve AI Usage. Focused bug reports, documentation fixes, tests, and pull requests are welcome.

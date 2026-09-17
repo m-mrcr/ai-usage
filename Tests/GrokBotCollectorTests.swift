@@ -2,7 +2,7 @@ import Foundation
 import XCTest
 
 final class GrokBotCollectorTests: XCTestCase {
-    /// Grok Bot と Cursor は同じアカウントで動くため、保存先も1つで足りる。
+    /// Grok Bot and Cursor run on the same account, so one stored session is enough for both.
     func testBothRoutesShareOneStoredSession() {
         XCTAssertEqual(CursorSession.service, "jp.co.forestx.aiusage.grokbot-session")
     }
@@ -12,7 +12,7 @@ final class GrokBotCollectorTests: XCTestCase {
         return try JSONDecoder().decode(GrokBotCollector.Status.self, from: data)
     }
 
-    /// 実際の応答をそのまま通し、画面に出る値まで組み上がることを固定する。
+    /// Passes a real response through as-is, locking in that it assembles into the value shown on screen.
     func testUsageStatusBecomesAWindowWithItsResetAndPlan() throws {
         let agent = GrokBotCollector.agent(from: try status([
             "currentPeriodStart": "2026-09-05T18:22:04.315Z",
@@ -36,7 +36,7 @@ final class GrokBotCollectorTests: XCTestCase {
         )
     }
 
-    /// 上限が無い契約では割合に意味がない。0%のバーを出すと余裕があると誤読させる。
+    /// A percentage is meaningless for a plan with no included limit. Showing a 0% bar would misleadingly suggest plenty of room.
     func testNoIncludedLimitProducesNoWindow() throws {
         let agent = GrokBotCollector.agent(from: try status([
             "usagePercent": 0,
@@ -54,7 +54,7 @@ final class GrokBotCollectorTests: XCTestCase {
         XCTAssertEqual(agent.status, .unavailable)
     }
 
-    /// double-submit方式のCSRF対策向け。Cookieと同じ値をヘッダにも載せる。
+    /// For double-submit-style CSRF protection. Carries the same value as the cookie in a header too.
     func testCSRFTokenIsTakenFromTheCookie() {
         XCTAssertEqual(
             CursorAPI.csrfToken(in: "a=1; csrf-token=tok123; b=2"),
@@ -64,7 +64,7 @@ final class GrokBotCollectorTests: XCTestCase {
         XCTAssertNil(CursorAPI.csrfToken(in: "csrf-token="))
     }
 
-    /// Cookieヘッダへ差し込む値なので、改行を通すとヘッダを分割されてしまう。
+    /// Since this value is spliced into a Cookie header, letting a newline through would split the header.
     func testSessionValidationRejectsHeaderBreakingValues() {
         let valid = "WorkosCursorSessionToken=abc123; workos_id=xyz"
         XCTAssertTrue(CursorSession.isValid(valid))

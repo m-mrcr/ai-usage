@@ -1,21 +1,21 @@
 #!/bin/bash
-# 配布用ビルド: アーカイブ → Developer ID 署名 → DMG → 公証 → ステープル。
+# Distribution build: archive -> Developer ID signing -> DMG -> notarization -> stapling.
 #
 #   ./scripts/release.sh --check
 #   ./scripts/release.sh
 #   ./scripts/release.sh --unnotarized --confirm-unnotarized
 #
-# 公証なしの成果物は明示確認を要求し、正規配布物とは別の場所・名前に出力する。
+# Unnotarized artifacts require explicit confirmation and are written to a separate location/name from regular distribution artifacts.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-PROJECT_NAME="AIUsage"          # プロジェクト / スキーム / アーカイブ名
-APP_NAME="AI Usage"             # 成果物の .app 名
+PROJECT_NAME="AIUsage"          # Project / scheme / archive name
+APP_NAME="AI Usage"             # .app name of the artifact
 APP_BUNDLE_ID="jp.co.forestx.aiusage"
 WIDGET_BUNDLE_ID="jp.co.forestx.aiusage.widget"
-DMG_NAME="AIUsage"              # 配布ファイル名（空白を含めない）
+DMG_NAME="AIUsage"              # Distribution file name (no spaces)
 VOLUME_NAME="AI Usage"
 TEAM_ID="WTKUV8PPM7"
 NOTARY_PROFILE="${NOTARY_PROFILE:-AIUsage}"
@@ -46,17 +46,17 @@ usage() {
   cat <<'USAGE'
 Usage:
   ./scripts/release.sh --check
-      公証済み直接配布に必要なツール、証明書、資格情報を確認する（変更なし）。
+      Check the tools, certificates, and credentials required for notarized direct distribution (no changes made).
 
   ./scripts/release.sh
-      Developer ID 署名、アプリ/DMG公証、ステープル、最終検証まで実行する。
+      Run Developer ID signing, app/DMG notarization, stapling, and final verification.
 
   ./scripts/release.sh --unnotarized --confirm-unnotarized
-      公証を明示的に省略する。成果物は dist/unnotarized/ の
-      *-UNNOTARIZED.dmg に隔離され、正規配布には使用できない。
+      Explicitly skip notarization. The artifact is isolated to dist/unnotarized/
+      as *-UNNOTARIZED.dmg and must not be used for regular distribution.
 
   ./scripts/release.sh --help
-      このヘルプを表示する。
+      Show this help.
 
 Unknown options are rejected. The legacy SKIP_NOTARIZE environment variable is rejected.
 USAGE
@@ -78,15 +78,15 @@ case "$#:$*" in
     UNNOTARIZED=1
     ;;
   *)
-    fail "不明または不完全な引数です。"
+    fail "Unknown or incomplete arguments."
     usage >&2
     exit 2
     ;;
 esac
 
 if [ -n "${SKIP_NOTARIZE+x}" ]; then
-  fail "SKIP_NOTARIZE は安全上の理由で廃止しました。"
-  fail "必要な場合だけ --unnotarized --confirm-unnotarized を明示してください。"
+  fail "SKIP_NOTARIZE has been removed for safety reasons."
+  fail "Pass --unnotarized --confirm-unnotarized explicitly only when it is actually needed."
   exit 2
 fi
 
@@ -94,11 +94,11 @@ VERSION=$(/usr/bin/awk '$1 == "MARKETING_VERSION:" {gsub(/"/, "", $2); print $2;
 BUILD_NUMBER=$(/usr/bin/awk '$1 == "CURRENT_PROJECT_VERSION:" {gsub(/"/, "", $2); print $2; exit}' project.yml)
 
 if [[ ! "$VERSION" =~ ^[0-9]+([.][0-9A-Za-z]+)*([-][0-9A-Za-z.-]+)?$ ]]; then
-  fail "project.yml の MARKETING_VERSION が不正です: ${VERSION:-<empty>}"
+  fail "MARKETING_VERSION in project.yml is invalid: ${VERSION:-<empty>}"
   exit 1
 fi
 if [[ ! "$BUILD_NUMBER" =~ ^[0-9]+$ ]]; then
-  fail "project.yml の CURRENT_PROJECT_VERSION が不正です: ${BUILD_NUMBER:-<empty>}"
+  fail "CURRENT_PROJECT_VERSION in project.yml is invalid: ${BUILD_NUMBER:-<empty>}"
   exit 1
 fi
 
@@ -112,7 +112,7 @@ fi
 FINAL_DMG_HASH_FILE="$FINAL_DMG.sha256"
 DMG_HASH_FILE="$FINAL_DMG_HASH_FILE"
 
-# ---------- 署名・事前確認 ----------
+# ---------- Signing / preflight checks ----------
 signing_identity_hash() {
   security find-identity -v -p codesigning 2>/dev/null \
     | /usr/bin/awk -v team="($TEAM_ID)" \
@@ -166,42 +166,42 @@ inspect_git_source() {
   GIT_SOURCE_ERROR=""
 
   if ! command -v git >/dev/null 2>&1; then
-    GIT_SOURCE_ERROR="gitコマンドがありません"
+    GIT_SOURCE_ERROR="git command not found"
     return 1
   fi
   if [ "$(git -C "$ROOT" rev-parse --is-inside-work-tree 2>/dev/null || printf 'false')" != "true" ]; then
-    GIT_SOURCE_ERROR="project rootがGit worktreeではありません"
+    GIT_SOURCE_ERROR="project root is not a Git worktree"
     return 1
   fi
   if ! git_root=$(git -C "$ROOT" rev-parse --show-toplevel 2>/dev/null); then
-    GIT_SOURCE_ERROR="Git repository rootを取得できません"
+    GIT_SOURCE_ERROR="cannot get the Git repository root"
     return 1
   fi
   if ! git_root_physical=$(cd "$git_root" 2>/dev/null && pwd -P); then
-    GIT_SOURCE_ERROR="Git repository rootを解決できません"
+    GIT_SOURCE_ERROR="cannot resolve the Git repository root"
     return 1
   fi
   root_physical=$(cd "$ROOT" && pwd -P)
   if [ "$git_root_physical" != "$root_physical" ]; then
-    GIT_SOURCE_ERROR="project rootとGit repository rootが一致しません"
+    GIT_SOURCE_ERROR="project root and Git repository root do not match"
     return 1
   fi
   if ! GIT_SOURCE_COMMIT=$(git -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null); then
     GIT_SOURCE_COMMIT=""
-    GIT_SOURCE_ERROR="有効なHEAD commitがありません"
+    GIT_SOURCE_ERROR="no valid HEAD commit"
     return 1
   fi
   if [[ ! "$GIT_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
-    GIT_SOURCE_ERROR="HEAD commit IDがGitHub互換の40桁SHAではありません"
+    GIT_SOURCE_ERROR="HEAD commit ID is not a GitHub-compatible 40-digit SHA"
     return 1
   fi
   if ! status_output=$(git -C "$ROOT" status --porcelain --untracked-files=all 2>/dev/null); then
-    GIT_SOURCE_ERROR="Git worktree状態を取得できません"
+    GIT_SOURCE_ERROR="cannot get the Git worktree status"
     return 1
   fi
   if [ -n "$status_output" ]; then
     GIT_SOURCE_STATE="dirty"
-    GIT_SOURCE_ERROR="Git worktreeに未commitまたは未追跡の変更があります"
+    GIT_SOURCE_ERROR="Git worktree has uncommitted or untracked changes"
     return 1
   fi
 
@@ -224,7 +224,7 @@ inspect_xcode_toolchain() {
     DEVELOPER_DIRECTORY_SOURCE="DEVELOPER_DIR"
   fi
   if ! xcodebuild_path=$(xcrun --find xcodebuild 2>/dev/null); then
-    XCODE_TOOLCHAIN_ERROR="実効Xcodeのxcodebuildを解決できません"
+    XCODE_TOOLCHAIN_ERROR="cannot resolve the effective Xcode's xcodebuild"
     return 1
   fi
   case "$xcodebuild_path" in
@@ -232,18 +232,18 @@ inspect_xcode_toolchain() {
       developer_dir=${xcodebuild_path%/usr/bin/xcodebuild}
       ;;
     *)
-      XCODE_TOOLCHAIN_ERROR="xcodebuildがXcode.app内にありません: $xcodebuild_path"
+      XCODE_TOOLCHAIN_ERROR="xcodebuild is not inside Xcode.app: $xcodebuild_path"
       return 1
       ;;
   esac
   if ! EFFECTIVE_DEVELOPER_DIR=$(cd "$developer_dir" 2>/dev/null && pwd -P); then
-    XCODE_TOOLCHAIN_ERROR="実効Developer directoryを解決できません: $developer_dir"
+    XCODE_TOOLCHAIN_ERROR="cannot resolve the effective Developer directory: $developer_dir"
     return 1
   fi
   EFFECTIVE_XCODE_APP=${EFFECTIVE_DEVELOPER_DIR%/Contents/Developer}
   EFFECTIVE_XCODEBUILD_PATH="$EFFECTIVE_DEVELOPER_DIR/usr/bin/xcodebuild"
   if [ ! -f "$EFFECTIVE_XCODE_APP/Contents/Info.plist" ]; then
-    XCODE_TOOLCHAIN_ERROR="実効Xcode.appのInfo.plistがありません: $EFFECTIVE_XCODE_APP"
+    XCODE_TOOLCHAIN_ERROR="effective Xcode.app's Info.plist is missing: $EFFECTIVE_XCODE_APP"
     return 1
   fi
   if [ -f "$EFFECTIVE_XCODE_APP/Contents/Resources/BetaVersion.plist" ]; then
@@ -260,9 +260,9 @@ check_git_source_checkpoint() {
 
   if inspect_git_source; then
     if [ -z "$EXPECTED_GIT_COMMIT" ]; then
-      checkpoint_error="preflight時のsource commitがありません"
+      checkpoint_error="no source commit recorded at preflight"
     elif [ "$GIT_SOURCE_COMMIT" != "$EXPECTED_GIT_COMMIT" ]; then
-      checkpoint_error="HEADがpreflight時のcommitから変わりました"
+      checkpoint_error="HEAD has changed since the preflight commit"
     else
       return 0
     fi
@@ -271,10 +271,10 @@ check_git_source_checkpoint() {
   fi
 
   if [ "$UNNOTARIZED" -eq 1 ]; then
-    warn "  [--] $checkpoint のGit source確認: $checkpoint_error"
+    warn "  [--] Git source check at $checkpoint: $checkpoint_error"
     return 0
   fi
-  fail "$checkpoint のGit source確認に失敗: $checkpoint_error"
+  fail "Git source check at $checkpoint failed: $checkpoint_error"
   return 1
 }
 
@@ -297,11 +297,11 @@ inspect_release_tools() {
   RELEASE_TOOLS_ERROR=""
 
   if [ ! -x "$DMGBUILD_PYTHON" ]; then
-    RELEASE_TOOLS_ERROR="固定Python環境がありません: $DMGBUILD_PYTHON"
+    RELEASE_TOOLS_ERROR="pinned Python environment is missing: $DMGBUILD_PYTHON"
     return 1
   fi
   if [ ! -f "$DMGBUILD_STAMP" ]; then
-    RELEASE_TOOLS_ERROR="release tool stampがありません: $DMGBUILD_STAMP"
+    RELEASE_TOOLS_ERROR="release tool stamp is missing: $DMGBUILD_STAMP"
     return 1
   fi
 
@@ -343,7 +343,7 @@ print("\t".join((
 )))
 PY
   ); then
-    RELEASE_TOOLS_ERROR="release toolのversionまたはinstalled file integrityが一致しません"
+    RELEASE_TOOLS_ERROR="release tool version or installed file integrity does not match"
     return 1
   fi
 
@@ -356,7 +356,7 @@ PY
      || [ -z "$ACTUAL_DMGBUILD_VERSION" ] \
      || [ -z "$ACTUAL_DS_STORE_VERSION" ] \
      || [ -z "$ACTUAL_MAC_ALIAS_VERSION" ]; then
-    RELEASE_TOOLS_ERROR="release toolの実測versionを取得できません"
+    RELEASE_TOOLS_ERROR="cannot get the actual release tool versions"
     return 1
   fi
 
@@ -370,7 +370,7 @@ PY
     "macAliasVersion=$ACTUAL_MAC_ALIAS_VERSION")
   actual_stamp=$(cat "$DMGBUILD_STAMP")
   if [ "$actual_stamp" != "$expected_stamp" ]; then
-    RELEASE_TOOLS_ERROR="release tool stampが現在のrequirementsとinstalled environmentに一致しません"
+    RELEASE_TOOLS_ERROR="release tool stamp does not match the current requirements and installed environment"
     return 1
   fi
   return 0
@@ -386,28 +386,28 @@ preflight() {
     xcode-select xcodebuild xcodegen xcrun
   )
 
-  echo "== 配布に必要なもの =="
+  echo "== Requirements for distribution =="
 
   for tool in "${required_tools[@]}"; do
     if ! command -v "$tool" >/dev/null 2>&1; then
-      fail "  [--] 必須コマンドがありません: $tool"
+      fail "  [--] required command not found: $tool"
       ready=1
     fi
   done
   if [ "$ready" -eq 0 ]; then
-    green "  [ok] 必須コマンド"
+    green "  [ok] required commands"
   fi
 
   if [ ! -f "$DMG_SETTINGS" ] || [ ! -f "$DMG_REQUIREMENTS" ] \
      || [ ! -f "$DMG_BACKGROUND_RENDERER" ]; then
-    fail "  [--] DMGレイアウト設定または背景rendererがありません"
+    fail "  [--] DMG layout settings or background renderer not found"
     ready=1
   elif inspect_release_tools; then
     green "  [ok] dmgbuild $ACTUAL_DMGBUILD_VERSION / ds-store $ACTUAL_DS_STORE_VERSION / mac-alias $ACTUAL_MAC_ALIAS_VERSION"
   else
-    fail "  [--] dmgbuild $EXPECTED_DMGBUILD_VERSION の固定環境を検証できません"
+    fail "  [--] cannot verify the pinned environment for dmgbuild $EXPECTED_DMGBUILD_VERSION"
     fail "       $RELEASE_TOOLS_ERROR"
-    echo "       ./scripts/bootstrap-release-tools.sh を先に実行してください。"
+    echo "       Run ./scripts/bootstrap-release-tools.sh first."
     ready=1
   fi
 
@@ -416,44 +416,44 @@ preflight() {
     green "  [ok] Git source: clean HEAD $EXPECTED_GIT_COMMIT"
   elif [ "$UNNOTARIZED" -eq 1 ]; then
     EXPECTED_GIT_COMMIT=$GIT_SOURCE_COMMIT
-    warn "  [--] Git source: ${GIT_SOURCE_ERROR}（公証なしローカル検証のみ継続）"
+    warn "  [--] Git source: ${GIT_SOURCE_ERROR} (continuing with local verification only, unnotarized)"
   else
     EXPECTED_GIT_COMMIT=""
     fail "  [--] Git source: $GIT_SOURCE_ERROR"
-    fail "       正規releaseはGit repositoryのcleanなHEADからだけ作成できます。"
+    fail "       A regular release can only be created from a clean HEAD in the Git repository."
     ready=1
   fi
 
   if xcrun --find notarytool >/dev/null 2>&1 && xcrun --find stapler >/dev/null 2>&1; then
     green "  [ok] notarytool / stapler"
   elif [ "$UNNOTARIZED" -eq 0 ]; then
-    fail "  [--] notarytool または stapler が見つかりません"
+    fail "  [--] notarytool or stapler not found"
     ready=1
   else
-    warn "  [--] notarytool / stapler なし（明示した公証なしビルドでは未使用）"
+    warn "  [--] notarytool / stapler missing (unused in an explicit unnotarized build)"
   fi
 
   if have_signing_id; then
-    green "  [ok] Team $TEAM_ID の Developer ID Application 証明書"
+    green "  [ok] Developer ID Application certificate for Team $TEAM_ID"
     signing_identity_lines | sed 's/^/       /'
   else
-    fail "  [--] Team $TEAM_ID の Developer ID Application 証明書がありません"
+    fail "  [--] no Developer ID Application certificate for Team $TEAM_ID"
     echo "       Xcode > Settings > Accounts > Manage Certificates > + > Developer ID Application"
     ready=1
   fi
 
   if [ "$UNNOTARIZED" -eq 0 ]; then
     if have_notary_profile; then
-      green "  [ok] 公証資格情報（プロファイル: ${NOTARY_PROFILE}）"
+      green "  [ok] notarization credentials (profile: ${NOTARY_PROFILE})"
     else
-      fail "  [--] 公証資格情報を検証できません（資格情報またはネットワークを確認）"
+      fail "  [--] cannot verify notarization credentials (check credentials or network)"
       printf '       xcrun notarytool store-credentials "%s" \\\n' "$NOTARY_PROFILE"
       echo "         --apple-id <Apple ID> --team-id $TEAM_ID"
-      echo "       パスワードは安全な対話プロンプトで入力します。"
+      echo "       Enter the password at the secure interactive prompt."
       ready=1
     fi
   else
-    warn "  [--] 公証を明示的に省略するモードです"
+    warn "  [--] notarization is explicitly skipped in this mode"
   fi
 
   if inspect_xcode_toolchain && xcodebuild -version >/dev/null 2>&1; then
@@ -464,35 +464,35 @@ preflight() {
     if [ "$XCODE_RELEASE_CHANNEL" = "stable" ]; then
       green "  [ok] stable Xcode distribution"
     elif [ "$UNNOTARIZED" -eq 1 ]; then
-      warn "  [--] beta Xcodeを使用中（公証なしローカル検証のみ継続）"
+      warn "  [--] using a beta Xcode (continuing with local verification only, unnotarized)"
     else
-      fail "  [--] beta Xcodeは正規releaseに使用できません: $EFFECTIVE_XCODE_APP"
-      fail "       stable XcodeをDEVELOPER_DIRで明示して再実行してください。"
+      fail "  [--] a beta Xcode cannot be used for a regular release: $EFFECTIVE_XCODE_APP"
+      fail "       Re-run with a stable Xcode set explicitly via DEVELOPER_DIR."
       ready=1
     fi
   else
-    fail "  [--] Xcodeを検証できません: ${XCODE_TOOLCHAIN_ERROR:-xcodebuild実行失敗}"
+    fail "  [--] cannot verify Xcode: ${XCODE_TOOLCHAIN_ERROR:-xcodebuild execution failed}"
     ready=1
   fi
 
   secret_path=$(find_repository_secret)
   if [ -n "$secret_path" ]; then
-    fail "  [--] リポジトリ内に秘密鍵/証明書アーカイブがあります: $secret_path"
-    fail "       リポジトリ外へ移してから実行してください。"
+    fail "  [--] found a private key/certificate archive inside the repository: $secret_path"
+    fail "       Move it outside the repository before running this."
     ready=1
   else
-    green "  [ok] リポジトリ内に秘密鍵ファイルなし"
+    green "  [ok] no private key files inside the repository"
   fi
 
   if bash "$ROOT/scripts/check-localizations.sh"; then
-    green "  [ok] 日英localization catalog"
+    green "  [ok] Japanese/English localization catalog"
   else
-    fail "  [--] 日英localization catalogの検証に失敗"
+    fail "  [--] Japanese/English localization catalog verification failed"
     ready=1
   fi
 
   if [ ! -f "$PACKAGE_RESOLVED" ]; then
-    fail "  [--] Swift package lockがありません: $PACKAGE_RESOLVED"
+    fail "  [--] Swift package lock not found: $PACKAGE_RESOLVED"
     ready=1
   elif jq -e \
       --arg version "$SPARKLE_VERSION" \
@@ -504,29 +504,29 @@ preflight() {
                       and .state.revision == "ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a")]
             | length == 1)' \
       "$PACKAGE_RESOLVED" >/dev/null; then
-    green "  [ok] Sparkle $SPARKLE_VERSION のpackage lock"
+    green "  [ok] package lock for Sparkle $SPARKLE_VERSION"
   else
-    fail "  [--] Sparkle package lockが固定version/revisionと一致しません"
+    fail "  [--] Sparkle package lock does not match the pinned version/revision"
     ready=1
   fi
 
   if [ -e "$FINAL_DMG" ] || [ -e "$FINAL_DMG_HASH_FILE" ]; then
-    fail "  [--] 同じバージョンの出力が既にあります: $FINAL_DMG"
-    fail "       上書きはしません。バージョンを上げるか、既存成果物を退避してください。"
+    fail "  [--] output for this same version already exists: $FINAL_DMG"
+    fail "       It will not be overwritten. Bump the version or move the existing artifact aside."
     ready=1
   else
-    green "  [ok] 出力先に同一バージョンなし"
+    green "  [ok] no existing output for this version"
   fi
 
   echo
   if [ "$ready" -eq 0 ]; then
     if [ "$UNNOTARIZED" -eq 1 ]; then
-      warn "公証なしビルドの前提が揃っています。正規配布には使用できません。"
+      warn "Prerequisites for an unnotarized build are in place. It must not be used for regular distribution."
     else
-      green "すべて揃っています。./scripts/release.sh で公証済み配布物を作れます。"
+      green "Everything is in place. ./scripts/release.sh will produce a notarized distribution artifact."
     fi
   else
-    warn "上の問題を解消するまでリリース処理を開始しません。"
+    warn "The release process will not start until the issues above are resolved."
   fi
   return "$ready"
 }
@@ -541,7 +541,7 @@ fi
 
 preflight || exit 1
 
-# ---------- 監査記録 ----------
+# ---------- Audit records ----------
 RUN_TIMESTAMP=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
 RUN_ID=$(date -u '+%Y%m%dT%H%M%SZ')-$VERSION-$BUILD_NUMBER-$RELEASE_MODE
 RECORD_DIR="$RECORD_ROOT/$RUN_ID"
@@ -608,13 +608,13 @@ cleanup_mount() {
        || hdiutil detach "$MOUNT_DIR" >/dev/null 2>&1; then
       MOUNTED=0
     else
-      warn "DMGを自動ejectできませんでした: $MOUNT_DIR"
+      warn "could not auto-eject the DMG: $MOUNT_DIR"
       cleanup_status=1
     fi
   fi
   if [ "$MOUNTED" -eq 0 ] && [ -n "$MOUNT_DIR" ] && [ -d "$MOUNT_DIR" ]; then
     if ! rmdir "$MOUNT_DIR" >/dev/null 2>&1; then
-      warn "一時mount directoryを削除できませんでした: $MOUNT_DIR"
+      warn "could not remove the temporary mount directory: $MOUNT_DIR"
       cleanup_status=1
     fi
   fi
@@ -630,17 +630,18 @@ cleanup_on_exit() {
   fi
   if [ "$ARTIFACTS_PUBLISHED" -eq 1 ] && [ "$CURRENT_STEP" != "complete" ]; then
     if [ -e "$FINAL_DMG" ] && ! rm "$FINAL_DMG"; then
-      warn "失敗したreleaseの公開DMGを取り除けませんでした: $FINAL_DMG"
+      warn "could not remove the published DMG from the failed release: $FINAL_DMG"
       script_status=1
     fi
     if [ -e "$FINAL_DMG_HASH_FILE" ] && ! rm "$FINAL_DMG_HASH_FILE"; then
-      warn "失敗したreleaseの公開checksumを取り除けませんでした: $FINAL_DMG_HASH_FILE"
+      warn "could not remove the published checksum from the failed release: $FINAL_DMG_HASH_FILE"
       script_status=1
     fi
     ARTIFACTS_PUBLISHED=0
   fi
-  # Bashの展開エラーなどで終了statusが誤って0として渡っても、完了点へ到達していない
-  # releaseを成功扱いにしない。途中終了したreceiptは必ずfailedへ閉じる。
+  # Even if a Bash expansion error or similar causes the exit status to be passed as 0 by mistake,
+  # a release that never reached the completion point must not be treated as a success.
+  # A receipt for a run that ended midway must always be closed as failed.
   if [ "$RECORD_CREATED" -eq 1 ] && [ -f "$PROVENANCE" ] \
      && [ "$CURRENT_STEP" != "complete" ]; then
     if [ "$script_status" -eq 0 ]; then
@@ -660,7 +661,7 @@ cleanup_on_exit() {
     if rmdir "$RELEASE_LOCK_DIR" >/dev/null 2>&1; then
       LOCK_HELD=0
     else
-      warn "release lockを解除できませんでした: $RELEASE_LOCK_DIR"
+      warn "could not release the release lock: $RELEASE_LOCK_DIR"
       if [ "$script_status" -eq 0 ]; then
         script_status=1
       fi
@@ -671,26 +672,26 @@ cleanup_on_exit() {
 trap cleanup_on_exit EXIT
 
 if ! mkdir "$RELEASE_LOCK_DIR" 2>/dev/null; then
-  fail "別のreleaseまたはrelease tool準備が実行中です: $RELEASE_LOCK_DIR"
-  fail "実行中のprocessがないのに残っている場合だけ、空のlock directoryをrmdirしてください。"
+  fail "another release or release tool preparation is running: $RELEASE_LOCK_DIR"
+  fail "Only rmdir the empty lock directory if no process is actually running and it was simply left behind."
   exit 1
 fi
 LOCK_HELD=1
 
-# preflight後に別processが先に同versionを公開したraceも、lock取得後に再確認する。
+# Re-check after acquiring the lock, in case another process published the same version first, after preflight.
 if [ -e "$FINAL_DMG" ] || [ -e "$FINAL_DMG_HASH_FILE" ]; then
-  fail "同じバージョンの出力が既にあります: $FINAL_DMG"
+  fail "output for this same version already exists: $FINAL_DMG"
   exit 1
 fi
 if ! mkdir "$RECORD_DIR"; then
-  fail "同名のrelease記録が既にあります: $RECORD_DIR"
+  fail "a release record with the same name already exists: $RECORD_DIR"
   exit 1
 fi
 RECORD_CREATED=1
 mkdir -p "$WORK_DIR"
 
-# macOS 27のplutilは空のJSON objectへ直接insertできないため、XMLでrootを構成してから
-# JSONへ変換する。以後のinsert/replaceは非空JSONに対して行う。
+# macOS 27's plutil cannot insert directly into an empty JSON object, so the root is built as XML first
+# and then converted to JSON. Subsequent inserts/replaces operate on non-empty JSON.
 plutil -create xml1 "$PROVENANCE"
 chmod 600 "$PROVENANCE"
 receipt_set_integer "schemaVersion" 1
@@ -722,15 +723,15 @@ receipt_set_string "notarization.dmg.status" "$([ "$UNNOTARIZED" -eq 1 ] && prin
 plutil -convert json -r "$PROVENANCE"
 
 if ! inspect_xcode_toolchain; then
-  fail "receipt作成前にXcodeを検証できません: $XCODE_TOOLCHAIN_ERROR"
+  fail "cannot verify Xcode before creating the receipt: $XCODE_TOOLCHAIN_ERROR"
   exit 1
 fi
 if [ -z "$EXPECTED_DEVELOPER_DIR" ] || [ "$EFFECTIVE_DEVELOPER_DIR" != "$EXPECTED_DEVELOPER_DIR" ]; then
-  fail "preflight後に実効Developer directoryが変わりました。releaseを中止します。"
+  fail "The effective Developer directory changed after preflight. Aborting the release."
   exit 1
 fi
 if [ "$UNNOTARIZED" -eq 0 ] && [ "$XCODE_RELEASE_CHANNEL" != "stable" ]; then
-  fail "receipt作成前にbeta Xcodeを検出しました。releaseを中止します。"
+  fail "Detected a beta Xcode before creating the receipt. Aborting the release."
   exit 1
 fi
 
@@ -755,7 +756,7 @@ receipt_set_string "signing.preflightDeveloperIdSha1" "$SIGN_ID"
 
 if inspect_git_source; then
   if [ -n "$EXPECTED_GIT_COMMIT" ] && [ "$GIT_SOURCE_COMMIT" != "$EXPECTED_GIT_COMMIT" ]; then
-    fail "receipt作成前にHEADが変わりました。releaseを中止します。"
+    fail "HEAD changed before creating the receipt. Aborting the release."
     exit 1
   fi
   receipt_set_string "source.gitCommit" "$GIT_SOURCE_COMMIT"
@@ -764,10 +765,10 @@ else
   receipt_set_string "source.gitCommit" "${GIT_SOURCE_COMMIT:-unavailable}"
   receipt_set_string "source.gitState" "$GIT_SOURCE_STATE"
   if [ "$UNNOTARIZED" -eq 0 ]; then
-    fail "receipt作成前のGit source確認に失敗: $GIT_SOURCE_ERROR"
+    fail "Git source check before creating the receipt failed: $GIT_SOURCE_ERROR"
     exit 1
   fi
-  warn "公証なし成果物のGit sourceは${GIT_SOURCE_STATE}です: $GIT_SOURCE_ERROR"
+  warn "Git source for the unnotarized artifact is ${GIT_SOURCE_STATE}: $GIT_SOURCE_ERROR"
 fi
 
 run_logged() {
@@ -835,7 +836,7 @@ snapshot_dmg_input() {
   local snapshot_hash
 
   expected_hash=$(source_manifest_hash_for "$SOURCE_MANIFEST_AFTER" "$relative_path") \
-    || { fail "source manifestにDMG入力がありません: $relative_path"; return 1; }
+    || { fail "DMG input not found in source manifest: $relative_path"; return 1; }
   if [ "$UNNOTARIZED" -eq 0 ]; then
     git -C "$ROOT" show "$EXPECTED_GIT_COMMIT:$relative_path" >"$snapshot_path"
   else
@@ -843,7 +844,7 @@ snapshot_dmg_input() {
   fi
   snapshot_hash=$(shasum -a 256 "$snapshot_path" | /usr/bin/awk '{print $1}')
   [ "$snapshot_hash" = "$expected_hash" ] \
-    || { fail "DMG入力snapshotがbuild時sourceと一致しません: $relative_path"; return 1; }
+    || { fail "DMG input snapshot does not match the source at build time: $relative_path"; return 1; }
   chmod 600 "$snapshot_path"
 }
 
@@ -899,16 +900,16 @@ verify_exported_app() {
   local expected_app_group="$TEAM_ID.$APP_BUNDLE_ID"
   local actual
 
-  [ -d "$APP" ] || { fail "書き出されたアプリがありません: $APP"; return 1; }
-  [ -d "$widget" ] || { fail "Widget拡張がありません: $widget"; return 1; }
-  [ -d "$sparkle" ] || { fail "Sparkle.frameworkがアプリにありません"; return 1; }
-  [ -f "$sparkle_plist" ] || { fail "Sparkle.frameworkのInfo.plistがありません"; return 1; }
-  [ -s "$notices" ] || { fail "ライセンス・third-party noticesがアプリにありません"; return 1; }
+  [ -d "$APP" ] || { fail "exported app not found: $APP"; return 1; }
+  [ -d "$widget" ] || { fail "widget extension not found: $widget"; return 1; }
+  [ -d "$sparkle" ] || { fail "Sparkle.framework not found in the app"; return 1; }
+  [ -f "$sparkle_plist" ] || { fail "Sparkle.framework's Info.plist not found"; return 1; }
+  [ -s "$notices" ] || { fail "license/third-party notices not found in the app"; return 1; }
   [ "$(shasum -a 256 "$notices" | /usr/bin/awk '{print $1}')" \
     = "$(shasum -a 256 "$ROOT/Resources/Third-Party-Notices.txt" | /usr/bin/awk '{print $1}')" ] \
-    || { fail "アプリ内のライセンス・third-party noticesがソースと一致しません"; return 1; }
+    || { fail "license/third-party notices in the app do not match the source"; return 1; }
   [ ! -e "$widget/Contents/Frameworks/Sparkle.framework" ] \
-    || { fail "WidgetへSparkle.frameworkを含めてはいけません"; return 1; }
+    || { fail "the widget must not include Sparkle.framework"; return 1; }
 
   local localized_bundle
   local language_code
@@ -917,9 +918,9 @@ verify_exported_app() {
     for language_code in en ja; do
       strings_file="$localized_bundle/Contents/Resources/$language_code.lproj/Localizable.strings"
       [ -f "$strings_file" ] \
-        || { fail "$localized_bundle に $language_code localizationがありません"; return 1; }
+        || { fail "$language_code localization not found in $localized_bundle"; return 1; }
       plutil -lint "$strings_file" >/dev/null \
-        || { fail "$strings_file を検証できません"; return 1; }
+        || { fail "cannot verify $strings_file"; return 1; }
     done
   done
 
@@ -929,8 +930,8 @@ verify_exported_app() {
 
   codesign -d --extract-certificates="$app_cert_prefix" "$APP" >/dev/null 2>&1
   codesign -d --extract-certificates="$widget_cert_prefix" "$widget" >/dev/null 2>&1
-  [ -f "${app_cert_prefix}0" ] || { fail "アプリの署名証明書を抽出できません"; return 1; }
-  [ -f "${widget_cert_prefix}0" ] || { fail "Widgetの署名証明書を抽出できません"; return 1; }
+  [ -f "${app_cert_prefix}0" ] || { fail "cannot extract the app's signing certificate"; return 1; }
+  [ -f "${widget_cert_prefix}0" ] || { fail "cannot extract the widget's signing certificate"; return 1; }
   find "$RECORD_DIR" -maxdepth 1 -type f \
     \( -name 'exported-app-signing-cert-*' -o -name 'exported-widget-signing-cert-*' \) \
     -exec chmod 600 {} +
@@ -938,49 +939,49 @@ verify_exported_app() {
   widget_cert_sha1=$(shasum -a 1 "${widget_cert_prefix}0" | /usr/bin/awk '{print toupper($1)}')
   signing_identity_lines | /usr/bin/awk -v hash="$app_cert_sha1" \
     '$2 == hash {found=1} END {exit found ? 0 : 1}' \
-    || { fail "実際のアプリ署名証明書がTeam ${TEAM_ID}の利用可能identityと一致しません"; return 1; }
+    || { fail "the app's actual signing certificate does not match an available identity for Team ${TEAM_ID}"; return 1; }
   [ "$widget_cert_sha1" = "$app_cert_sha1" ] \
-    || { fail "アプリとWidgetの署名証明書が一致しません"; return 1; }
+    || { fail "the app's and widget's signing certificates do not match"; return 1; }
   receipt_set_string "signing.developerIdSha1" "$app_cert_sha1"
   receipt_set_string "signing.appLeafCertificatePath" "${app_cert_prefix}0"
   receipt_set_string "signing.widgetLeafCertificatePath" "${widget_cert_prefix}0"
-  # DMGも、Xcodeが実際にexportへ使った同じ証明書で署名する。
+  # The DMG is also signed with the same certificate Xcode actually used for the export.
   SIGN_ID="$app_cert_sha1"
 
   actual=$(codesign_team_id "$APP")
-  [ "$actual" = "$TEAM_ID" ] || { fail "アプリのTeam ID不一致: $actual"; return 1; }
+  [ "$actual" = "$TEAM_ID" ] || { fail "app Team ID mismatch: $actual"; return 1; }
   actual=$(codesign_team_id "$widget")
-  [ "$actual" = "$TEAM_ID" ] || { fail "WidgetのTeam ID不一致: $actual"; return 1; }
+  [ "$actual" = "$TEAM_ID" ] || { fail "widget Team ID mismatch: $actual"; return 1; }
 
   actual=$(plist_value CFBundleIdentifier "$app_plist")
-  [ "$actual" = "$APP_BUNDLE_ID" ] || { fail "アプリのBundle ID不一致: $actual"; return 1; }
+  [ "$actual" = "$APP_BUNDLE_ID" ] || { fail "app Bundle ID mismatch: $actual"; return 1; }
   actual=$(plist_value CFBundleIdentifier "$widget_plist")
-  [ "$actual" = "$WIDGET_BUNDLE_ID" ] || { fail "WidgetのBundle ID不一致: $actual"; return 1; }
+  [ "$actual" = "$WIDGET_BUNDLE_ID" ] || { fail "widget Bundle ID mismatch: $actual"; return 1; }
 
   actual=$(plist_value CFBundleShortVersionString "$app_plist")
-  [ "$actual" = "$VERSION" ] || { fail "アプリのversion不一致: $actual"; return 1; }
+  [ "$actual" = "$VERSION" ] || { fail "app version mismatch: $actual"; return 1; }
   actual=$(plist_value CFBundleVersion "$app_plist")
-  [ "$actual" = "$BUILD_NUMBER" ] || { fail "アプリのbuild number不一致: $actual"; return 1; }
+  [ "$actual" = "$BUILD_NUMBER" ] || { fail "app build number mismatch: $actual"; return 1; }
   actual=$(plist_value CFBundleShortVersionString "$widget_plist")
-  [ "$actual" = "$VERSION" ] || { fail "Widgetのversion不一致: $actual"; return 1; }
+  [ "$actual" = "$VERSION" ] || { fail "widget version mismatch: $actual"; return 1; }
   actual=$(plist_value CFBundleVersion "$widget_plist")
-  [ "$actual" = "$BUILD_NUMBER" ] || { fail "Widgetのbuild number不一致: $actual"; return 1; }
+  [ "$actual" = "$BUILD_NUMBER" ] || { fail "widget build number mismatch: $actual"; return 1; }
 
   actual=$(plist_value SUFeedURL "$app_plist")
-  [ "$actual" = "$SPARKLE_FEED_URL" ] || { fail "Sparkle feed URL不一致: $actual"; return 1; }
+  [ "$actual" = "$SPARKLE_FEED_URL" ] || { fail "Sparkle feed URL mismatch: $actual"; return 1; }
   actual=$(plist_value SUPublicEDKey "$app_plist")
-  [ "$actual" = "$SPARKLE_PUBLIC_KEY" ] || { fail "Sparkle公開鍵不一致"; return 1; }
+  [ "$actual" = "$SPARKLE_PUBLIC_KEY" ] || { fail "Sparkle public key mismatch"; return 1; }
   actual=$(plist_value SUVerifyUpdateBeforeExtraction "$app_plist")
-  [ "$actual" = "true" ] || { fail "更新アーカイブの展開前検証が有効ではありません"; return 1; }
+  [ "$actual" = "true" ] || { fail "pre-extraction verification of the update archive is not enabled"; return 1; }
   actual=$(plist_value SURequireSignedFeed "$app_plist")
-  [ "$actual" = "true" ] || { fail "署名済みappcastが必須になっていません"; return 1; }
+  [ "$actual" = "true" ] || { fail "a signed appcast is not required"; return 1; }
   actual=$(plist_value SUScheduledCheckInterval "$app_plist")
-  [ "$actual" = "86400" ] || { fail "更新確認間隔が想定外です: $actual"; return 1; }
+  [ "$actual" = "86400" ] || { fail "unexpected update check interval: $actual"; return 1; }
   actual=$(plist_value CFBundleShortVersionString "$sparkle_plist")
-  [ "$actual" = "$SPARKLE_VERSION" ] || { fail "Sparkle version不一致: $actual"; return 1; }
+  [ "$actual" = "$SPARKLE_VERSION" ] || { fail "Sparkle version mismatch: $actual"; return 1; }
   otool -L "$APP/Contents/MacOS/$APP_NAME" \
     | /usr/bin/awk 'index($1, "@rpath/Sparkle.framework/") {found=1} END {exit found ? 0 : 1}' \
-    || { fail "アプリ実行ファイルが内包Sparkle.frameworkを参照していません"; return 1; }
+    || { fail "the app executable does not reference the bundled Sparkle.framework"; return 1; }
 
   receipt_set_string "update.feedURL" "$SPARKLE_FEED_URL"
   receipt_set_string "update.publicEdKey" "$SPARKLE_PUBLIC_KEY"
@@ -996,29 +997,29 @@ verify_exported_app() {
   plutil -lint "$widget_entitlements" >/dev/null
 
   if actual=$(entitlement_value "com.apple.security.app-sandbox" "$app_entitlements"); then
-    [ "$actual" = "false" ] || { fail "非sandboxであるべきアプリにapp-sandbox entitlementがあります"; return 1; }
+    [ "$actual" = "false" ] || { fail "the app, which should not be sandboxed, has the app-sandbox entitlement"; return 1; }
   fi
   actual=$(entitlement_value "com.apple.security.app-sandbox" "$widget_entitlements" || printf '')
-  [ "$actual" = "true" ] || { fail "Widgetのapp-sandbox entitlementがありません"; return 1; }
+  [ "$actual" = "true" ] || { fail "the widget is missing the app-sandbox entitlement"; return 1; }
 
   actual=$(entitlement_value "com.apple.security.application-groups:0" "$app_entitlements" || printf '')
-  [ "$actual" = "$expected_app_group" ] || { fail "アプリのApp Group不一致: $actual"; return 1; }
+  [ "$actual" = "$expected_app_group" ] || { fail "app App Group mismatch: $actual"; return 1; }
   actual=$(entitlement_value "com.apple.security.application-groups:0" "$widget_entitlements" || printf '')
-  [ "$actual" = "$expected_app_group" ] || { fail "WidgetのApp Group不一致: $actual"; return 1; }
+  [ "$actual" = "$expected_app_group" ] || { fail "widget App Group mismatch: $actual"; return 1; }
   if entitlement_value "com.apple.security.application-groups:1" "$app_entitlements" >/dev/null \
      || entitlement_value "com.apple.security.application-groups:1" "$widget_entitlements" >/dev/null; then
-    fail "想定外の追加App Group entitlementがあります"
+    fail "found an unexpected additional App Group entitlement"
     return 1
   fi
 
   if actual=$(entitlement_value "com.apple.security.get-task-allow" "$app_entitlements"); then
-    [ "$actual" = "false" ] || { fail "アプリにget-task-allow entitlementがあります"; return 1; }
+    [ "$actual" = "false" ] || { fail "the app has the get-task-allow entitlement"; return 1; }
   fi
   if actual=$(entitlement_value "com.apple.security.get-task-allow" "$widget_entitlements"); then
-    [ "$actual" = "false" ] || { fail "Widgetにget-task-allow entitlementがあります"; return 1; }
+    [ "$actual" = "false" ] || { fail "the widget has the get-task-allow entitlement"; return 1; }
   fi
-  codesign_has_hardened_runtime "$APP" || { fail "アプリにhardened runtimeがありません"; return 1; }
-  codesign_has_hardened_runtime "$widget" || { fail "Widgetにhardened runtimeがありません"; return 1; }
+  codesign_has_hardened_runtime "$APP" || { fail "the app does not have hardened runtime"; return 1; }
+  codesign_has_hardened_runtime "$widget" || { fail "the widget does not have hardened runtime"; return 1; }
 
   receipt_set_string "artifacts.exportedAppEntitlementsPath" "$app_entitlements"
   receipt_set_string "artifacts.exportedAppEntitlementsSha256" \
@@ -1125,15 +1126,15 @@ submit_and_record_notarization() {
   printf '    log: %s\n' "$log_path"
 
   if [ "$command_status" -ne 0 ] || [ "$submission_status" != "Accepted" ]; then
-    fail "$label の公証がAcceptedになりませんでした。receiptのsubmission IDを確認し、盲目的に再送しないでください。"
+    fail "Notarization for $label did not reach Accepted. Check the submission ID in the receipt and do not blindly resubmit."
     return 1
   fi
   if [ "$log_ok" -ne 1 ]; then
-    fail "$label の公証ログを保存・検証できませんでした。submission ID $submission_id を使って取得してください。"
+    fail "Could not save/verify the notarization log for $label. Fetch it using submission ID $submission_id."
     return 1
   fi
   if [ "$issue_count" != "0" ]; then
-    warn "$label の公証ログにissueがあります。配布前に $log_path を確認してください。"
+    warn "The notarization log for $label has issues. Check $log_path before distributing."
   fi
 }
 
@@ -1148,7 +1149,7 @@ verify_dmg_contents() {
   local exported_sparkle="$APP/Contents/Frameworks/Sparkle.framework"
   local visible_items
 
-  echo "  -- $verification_label: DMG内のlayoutとアプリ --"
+  echo "  -- $verification_label: DMG layout and app --"
   MOUNT_DIR=$(mktemp -d "$WORK_DIR/mount.XXXXXX")
   if diskutil image attach --mountOptions nobrowse --readOnly --mountPoint "$MOUNT_DIR" \
        "$DMG" >/dev/null 2>&1; then
@@ -1157,7 +1158,7 @@ verify_dmg_contents() {
          "$DMG" >/dev/null 2>&1; then
     MOUNTED=1
   else
-    fail "DMGを読み取り専用でマウントできませんでした"
+    fail "could not mount the DMG read-only"
     return 1
   fi
 
@@ -1165,19 +1166,19 @@ verify_dmg_contents() {
   mounted_widget="$mounted_app/Contents/PlugIns/AIUsageWidget.appex"
   mounted_sparkle="$mounted_app/Contents/Frameworks/Sparkle.framework"
   mounted_notices="$mounted_app/Contents/Resources/Third-Party-Notices.txt"
-  [ -d "$mounted_app" ] || { fail "DMG内に $APP_NAME.app がありません"; return 1; }
-  [ -d "$mounted_widget" ] || { fail "DMG内にWidget拡張がありません"; return 1; }
-  [ -d "$mounted_sparkle" ] || { fail "DMG内アプリにSparkle.frameworkがありません"; return 1; }
-  [ -s "$mounted_notices" ] || { fail "DMG内アプリにライセンス・third-party noticesがありません"; return 1; }
-  [ -L "$MOUNT_DIR/Applications" ] || { fail "DMG内にApplicationsリンクがありません"; return 1; }
+  [ -d "$mounted_app" ] || { fail "$APP_NAME.app not found in the DMG"; return 1; }
+  [ -d "$mounted_widget" ] || { fail "widget extension not found in the DMG"; return 1; }
+  [ -d "$mounted_sparkle" ] || { fail "Sparkle.framework not found in the app inside the DMG"; return 1; }
+  [ -s "$mounted_notices" ] || { fail "license/third-party notices not found in the app inside the DMG"; return 1; }
+  [ -L "$MOUNT_DIR/Applications" ] || { fail "Applications link not found in the DMG"; return 1; }
   [ "$(readlink "$MOUNT_DIR/Applications")" = "/Applications" ] \
-    || { fail "DMG内のApplicationsリンク先が不正です"; return 1; }
-  [ -s "$MOUNT_DIR/.DS_Store" ] || { fail "DMG内にFinderレイアウトがありません"; return 1; }
+    || { fail "the Applications link target in the DMG is invalid"; return 1; }
+  [ -s "$MOUNT_DIR/.DS_Store" ] || { fail "Finder layout not found in the DMG"; return 1; }
   [ -s "$MOUNT_DIR/.background.png" ] \
-    || { fail "DMG内に案内背景がありません"; return 1; }
+    || { fail "background image not found in the DMG"; return 1; }
   [ "$(shasum -a 256 "$MOUNT_DIR/.background.png" | /usr/bin/awk '{print $1}')" \
      = "$(shasum -a 256 "$DMG_BACKGROUND" | /usr/bin/awk '{print $1}')" ] \
-    || { fail "DMG内の案内背景が生成物と一致しません"; return 1; }
+    || { fail "the background image in the DMG does not match the generated artifact"; return 1; }
 
   if ! "$DMGBUILD_PYTHON" - "$MOUNT_DIR/.DS_Store" "$MOUNT_DIR" <<'PY'
 import os
@@ -1220,47 +1221,47 @@ valid = (
 raise SystemExit(0 if valid else 1)
 PY
   then
-    fail "DMG内のFinderレイアウトが設定値と一致しません"
+    fail "the Finder layout in the DMG does not match the configured settings"
     return 1
   fi
 
   visible_items=("$MOUNT_DIR"/*)
   [ "${#visible_items[@]}" -eq 2 ] \
-    || { fail "DMG rootの可視項目が2件ではありません"; return 1; }
+    || { fail "the DMG root does not have exactly 2 visible items"; return 1; }
 
   codesign --verify --deep --strict --verbose=2 "$mounted_app" 2>&1 | sed 's/^/    /'
   codesign --verify --strict --verbose=2 "$mounted_widget" 2>&1 | sed 's/^/    /'
   codesign --verify --deep --strict --verbose=2 "$mounted_sparkle" 2>&1 | sed 's/^/    /'
   [ "$(codesign_cdhash "$mounted_app")" = "$(codesign_cdhash "$APP")" ] \
-    || { fail "DMG内アプリのCDHashがexportと一致しません"; return 1; }
+    || { fail "the app's CDHash in the DMG does not match the export"; return 1; }
   [ "$(codesign_cdhash "$mounted_widget")" = "$(codesign_cdhash "$exported_widget")" ] \
-    || { fail "DMG内WidgetのCDHashがexportと一致しません"; return 1; }
+    || { fail "the widget's CDHash in the DMG does not match the export"; return 1; }
   [ "$(codesign_cdhash "$mounted_sparkle")" = "$(codesign_cdhash "$exported_sparkle")" ] \
-    || { fail "DMG内Sparkle.frameworkのCDHashがexportと一致しません"; return 1; }
+    || { fail "Sparkle.framework's CDHash in the DMG does not match the export"; return 1; }
   [ "$(shasum -a 256 "$mounted_notices" | /usr/bin/awk '{print $1}')" \
     = "$(shasum -a 256 "$APP/Contents/Resources/Third-Party-Notices.txt" | /usr/bin/awk '{print $1}')" ] \
-    || { fail "DMG内のライセンス・third-party noticesがexportと一致しません"; return 1; }
+    || { fail "the license/third-party notices in the DMG do not match the export"; return 1; }
 
   actual=$(codesign_team_id "$mounted_app")
-  [ "$actual" = "$TEAM_ID" ] || { fail "DMG内アプリのTeam ID不一致: $actual"; return 1; }
+  [ "$actual" = "$TEAM_ID" ] || { fail "app Team ID mismatch in the DMG: $actual"; return 1; }
   actual=$(codesign_team_id "$mounted_widget")
-  [ "$actual" = "$TEAM_ID" ] || { fail "DMG内WidgetのTeam ID不一致: $actual"; return 1; }
+  [ "$actual" = "$TEAM_ID" ] || { fail "widget Team ID mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleIdentifier "$mounted_app/Contents/Info.plist")
-  [ "$actual" = "$APP_BUNDLE_ID" ] || { fail "DMG内アプリのBundle ID不一致: $actual"; return 1; }
+  [ "$actual" = "$APP_BUNDLE_ID" ] || { fail "app Bundle ID mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleIdentifier "$mounted_widget/Contents/Info.plist")
-  [ "$actual" = "$WIDGET_BUNDLE_ID" ] || { fail "DMG内WidgetのBundle ID不一致: $actual"; return 1; }
+  [ "$actual" = "$WIDGET_BUNDLE_ID" ] || { fail "widget Bundle ID mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleShortVersionString "$mounted_app/Contents/Info.plist")
-  [ "$actual" = "$VERSION" ] || { fail "DMG内アプリのversion不一致: $actual"; return 1; }
+  [ "$actual" = "$VERSION" ] || { fail "app version mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleVersion "$mounted_app/Contents/Info.plist")
-  [ "$actual" = "$BUILD_NUMBER" ] || { fail "DMG内アプリのbuild不一致: $actual"; return 1; }
+  [ "$actual" = "$BUILD_NUMBER" ] || { fail "app build mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleShortVersionString "$mounted_widget/Contents/Info.plist")
-  [ "$actual" = "$VERSION" ] || { fail "DMG内Widgetのversion不一致: $actual"; return 1; }
+  [ "$actual" = "$VERSION" ] || { fail "widget version mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value CFBundleVersion "$mounted_widget/Contents/Info.plist")
-  [ "$actual" = "$BUILD_NUMBER" ] || { fail "DMG内Widgetのbuild不一致: $actual"; return 1; }
+  [ "$actual" = "$BUILD_NUMBER" ] || { fail "widget build mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value SUFeedURL "$mounted_app/Contents/Info.plist")
-  [ "$actual" = "$SPARKLE_FEED_URL" ] || { fail "DMG内アプリのSparkle feed URL不一致: $actual"; return 1; }
+  [ "$actual" = "$SPARKLE_FEED_URL" ] || { fail "app Sparkle feed URL mismatch in the DMG: $actual"; return 1; }
   actual=$(plist_value SUPublicEDKey "$mounted_app/Contents/Info.plist")
-  [ "$actual" = "$SPARKLE_PUBLIC_KEY" ] || { fail "DMG内アプリのSparkle公開鍵不一致"; return 1; }
+  [ "$actual" = "$SPARKLE_PUBLIC_KEY" ] || { fail "app Sparkle public key mismatch in the DMG"; return 1; }
 
   if [ "$UNNOTARIZED" -eq 0 ]; then
     spctl --assess --type execute -vv "$mounted_app" 2>&1 | sed 's/^/    /'
@@ -1304,7 +1305,7 @@ complete_receipt() {
   expected_hash=$(/usr/bin/awk 'NR == 1 {print $1}' "$FINAL_DMG_HASH_FILE")
   actual_hash=$(shasum -a 256 "$FINAL_DMG" | /usr/bin/awk '{print $1}')
   [ -n "$expected_hash" ] && [ "$actual_hash" = "$expected_hash" ] \
-    || { fail "公開後のDMGとchecksumが一致しません"; return 1; }
+    || { fail "the published DMG does not match the checksum"; return 1; }
 
   receipt_set_string "completedAt" "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   receipt_set_string "state" "$final_state"
@@ -1317,43 +1318,43 @@ complete_receipt() {
 publish_artifacts() {
   mkdir -p "$(dirname "$FINAL_DMG")"
   if [ -e "$FINAL_DMG" ] || [ -e "$FINAL_DMG_HASH_FILE" ]; then
-    fail "公開直前に同じバージョンの出力を検出しました: $FINAL_DMG"
+    fail "detected output for this same version right before publishing: $FINAL_DMG"
     return 1
   fi
 
-  # checksumを先にhard-linkし、DMGを最後にlinkする。途中中断で未検証DMG名を残さない。
+  # Hard-link the checksum first, then link the DMG last. This avoids leaving an unverified DMG name behind if interrupted midway.
   if ! ln "$WORK_DMG_HASH_FILE" "$FINAL_DMG_HASH_FILE"; then
-    fail "SHA-256成果物を公開先へ配置できませんでした"
+    fail "could not place the SHA-256 artifact at the publish destination"
     return 1
   fi
   if ! ln "$DMG" "$FINAL_DMG"; then
     rm "$FINAL_DMG_HASH_FILE"
-    fail "DMG成果物を公開先へ配置できませんでした"
+    fail "could not place the DMG artifact at the publish destination"
     return 1
   fi
   ARTIFACTS_PUBLISHED=1
 
   chmod 644 "$FINAL_DMG" "$FINAL_DMG_HASH_FILE"
   if ! rm "$DMG" "$WORK_DMG_HASH_FILE"; then
-    warn "検証済みworking artifactを削除できませんでした: $WORK_DIR"
+    warn "could not remove the verified working artifact: $WORK_DIR"
   fi
   DMG="$FINAL_DMG"
   DMG_HASH_FILE="$FINAL_DMG_HASH_FILE"
 }
 
-# ---------- ビルド ----------
+# ---------- Build ----------
 CURRENT_STEP="xcodegen"
-echo "==> プロジェクトを生成"
+echo "==> Generating the project"
 run_logged "$RECORD_DIR/xcodegen.log" xcodegen generate
 
 CURRENT_STEP="source-provenance"
-check_git_source_checkpoint "xcodegen後"
+check_git_source_checkpoint "after xcodegen"
 SOURCE_SHA256=$(write_source_manifest "$SOURCE_MANIFEST")
 receipt_set_string "source.manifestPath" "$SOURCE_MANIFEST"
 receipt_set_string "source.manifestSha256" "$SOURCE_SHA256"
 
 CURRENT_STEP="archive"
-echo "==> アーカイブ ($VERSION / $BUILD_NUMBER)"
+echo "==> Archiving ($VERSION / $BUILD_NUMBER)"
 rm -rf "$ARCHIVE" "$EXPORT_DIR"
 run_logged "$RECORD_DIR/xcodebuild-archive.log" \
   xcodebuild archive \
@@ -1368,10 +1369,10 @@ run_logged "$RECORD_DIR/xcodebuild-archive.log" \
     CODE_SIGN_STYLE=Automatic \
     DEVELOPMENT_TEAM="$TEAM_ID"
 
-[ -d "$ARCHIVE" ] || { fail "アーカイブが生成されませんでした"; exit 1; }
+[ -d "$ARCHIVE" ] || { fail "the archive was not created"; exit 1; }
 
 CURRENT_STEP="archive-recording"
-echo "==> dSYMとxcarchive metadataをrelease記録へ保存"
+echo "==> Saving dSYMs and xcarchive metadata to the release record"
 HOST_DSYM="$ARCHIVE/dSYMs/$APP_NAME.app.dSYM"
 WIDGET_DSYM="$ARCHIVE/dSYMs/AIUsageWidget.appex.dSYM"
 XCARCHIVE_INFO="$ARCHIVE/Info.plist"
@@ -1381,9 +1382,9 @@ HOST_DSYM_MANIFEST="$RECORD_DIR/host-dsym-sha256.txt"
 WIDGET_DSYM_MANIFEST="$RECORD_DIR/widget-dsym-sha256.txt"
 RECORDED_XCARCHIVE_INFO="$RECORD_DIR/xcarchive-Info.plist"
 
-[ -d "$HOST_DSYM" ] || { fail "アプリのdSYMがarchiveにありません: $HOST_DSYM"; exit 1; }
-[ -d "$WIDGET_DSYM" ] || { fail "WidgetのdSYMがarchiveにありません: $WIDGET_DSYM"; exit 1; }
-[ -f "$XCARCHIVE_INFO" ] || { fail "xcarchiveのInfo.plistがありません: $XCARCHIVE_INFO"; exit 1; }
+[ -d "$HOST_DSYM" ] || { fail "app dSYM not found in the archive: $HOST_DSYM"; exit 1; }
+[ -d "$WIDGET_DSYM" ] || { fail "widget dSYM not found in the archive: $WIDGET_DSYM"; exit 1; }
+[ -f "$XCARCHIVE_INFO" ] || { fail "xcarchive's Info.plist not found: $XCARCHIVE_INFO"; exit 1; }
 
 mkdir "$DEBUG_SYMBOL_DIR"
 ditto "$HOST_DSYM" "$RECORDED_HOST_DSYM"
@@ -1405,7 +1406,7 @@ receipt_set_string "artifacts.xcarchiveInfoPath" "$RECORDED_XCARCHIVE_INFO"
 receipt_set_string "artifacts.xcarchiveInfoSha256" "$XCARCHIVE_INFO_SHA256"
 
 CURRENT_STEP="export"
-echo "==> Developer ID で書き出し"
+echo "==> Exporting with Developer ID"
 run_logged "$RECORD_DIR/xcodebuild-export.log" \
   xcodebuild -exportArchive \
     -archivePath "$ARCHIVE" \
@@ -1414,27 +1415,27 @@ run_logged "$RECORD_DIR/xcodebuild-export.log" \
 
 APP="$EXPORT_DIR/$APP_NAME.app"
 CURRENT_STEP="export-verification"
-echo "==> 署名・bundle identity・versionを確認"
+echo "==> Verifying signature, bundle identity, and version"
 verify_exported_app
 
 SOURCE_SHA256_AFTER=$(write_source_manifest "$SOURCE_MANIFEST_AFTER")
 receipt_set_string "source.manifestAfterBuildPath" "$SOURCE_MANIFEST_AFTER"
 receipt_set_string "source.manifestAfterBuildSha256" "$SOURCE_SHA256_AFTER"
-check_git_source_checkpoint "archive/export後"
+check_git_source_checkpoint "after archive/export"
 if [ "$SOURCE_SHA256_AFTER" != "$SOURCE_SHA256" ]; then
-  fail "ビルド中にソースが変化しました。成果物を公証しません。"
+  fail "The source changed during the build. The artifact will not be notarized."
   exit 1
 fi
 
 CURRENT_STEP="dmg-input-snapshot"
-echo "==> DMG入力をbuild sourceから固定"
+echo "==> Pinning the DMG inputs from the build source"
 snapshot_dmg_inputs
 
-# ---------- アプリ単体の公証 ----------
-# DMG から取り出したあと初回起動がオフラインでも通るよう、.app にもチケットを貼る。
+# ---------- App-only notarization ----------
+# Staple a ticket onto the .app too, so the first launch succeeds offline after extraction from the DMG.
 if [ "$UNNOTARIZED" -eq 0 ]; then
   CURRENT_STEP="app-notarization"
-  echo "==> アプリを公証（1/2）"
+  echo "==> Notarizing the app (1/2)"
   APP_ZIP="$RECORD_DIR/$PROJECT_NAME-notary.zip"
   ditto -c -k --keepParent "$APP" "$APP_ZIP"
   chmod 600 "$APP_ZIP"
@@ -1446,26 +1447,26 @@ fi
 
 # ---------- DMG ----------
 CURRENT_STEP="dmg-source-verification"
-check_git_source_checkpoint "DMG生成前"
+check_git_source_checkpoint "before DMG creation"
 SOURCE_SHA256_BEFORE_DMG=$(write_source_manifest "$SOURCE_MANIFEST_BEFORE_DMG")
 receipt_set_string "source.manifestBeforeDmgPath" "$SOURCE_MANIFEST_BEFORE_DMG"
 receipt_set_string "source.manifestBeforeDmgSha256" "$SOURCE_SHA256_BEFORE_DMG"
 if [ "$SOURCE_SHA256_BEFORE_DMG" != "$SOURCE_SHA256_AFTER" ]; then
-  fail "アプリ公証待ちの間にソースが変化しました。DMGを生成しません。"
+  fail "The source changed while waiting for app notarization. The DMG will not be created."
   exit 1
 fi
 if ! inspect_release_tools; then
-  fail "DMG生成直前にrelease toolを検証できません: $RELEASE_TOOLS_ERROR"
+  fail "cannot verify the release tools right before creating the DMG: $RELEASE_TOOLS_ERROR"
   exit 1
 fi
 if [ "$(shasum -a 256 "$DMGBUILD_STAMP" | /usr/bin/awk '{print $1}')" \
      != "$(shasum -a 256 "$DMGBUILD_STAMP_SNAPSHOT" | /usr/bin/awk '{print $1}')" ]; then
-  fail "release tool stampがbuild中に変化しました"
+  fail "the release tool stamp changed during the build"
   exit 1
 fi
 
 CURRENT_STEP="dmg-creation"
-echo "==> DMG を作成"
+echo "==> Creating the DMG"
 mkdir -p "$(dirname "$DMG")"
 DEVELOPER_DIR="$EFFECTIVE_DEVELOPER_DIR" xcrun swift \
   "$DMG_BACKGROUND_RENDERER_SNAPSHOT" "$DMG_BACKGROUND"
@@ -1473,7 +1474,7 @@ DEVELOPER_DIR="$EFFECTIVE_DEVELOPER_DIR" xcrun swift \
 BACKGROUND_WIDTH=$(sips -g pixelWidth "$DMG_BACKGROUND" 2>/dev/null | /usr/bin/awk '/pixelWidth:/ {print $2}')
 BACKGROUND_HEIGHT=$(sips -g pixelHeight "$DMG_BACKGROUND" 2>/dev/null | /usr/bin/awk '/pixelHeight:/ {print $2}')
 if [ "$BACKGROUND_WIDTH" != "800" ] || [ "$BACKGROUND_HEIGHT" != "500" ]; then
-  fail "DMG背景の寸法が不正です: ${BACKGROUND_WIDTH:-?}x${BACKGROUND_HEIGHT:-?}"
+  fail "DMG background dimensions are invalid: ${BACKGROUND_WIDTH:-?}x${BACKGROUND_HEIGHT:-?}"
   exit 1
 fi
 
@@ -1503,30 +1504,30 @@ echo "    created (dmgbuild $ACTUAL_DMGBUILD_VERSION)"
 
 CURRENT_STEP="dmg-source-postcheck"
 if ! inspect_release_tools; then
-  fail "DMG生成後にrelease toolを検証できません: $RELEASE_TOOLS_ERROR"
+  fail "cannot verify the release tools after creating the DMG: $RELEASE_TOOLS_ERROR"
   exit 1
 fi
-check_git_source_checkpoint "DMG生成後"
+check_git_source_checkpoint "after DMG creation"
 SOURCE_SHA256_AFTER_DMG=$(write_source_manifest "$SOURCE_MANIFEST_AFTER_DMG")
 receipt_set_string "source.manifestAfterDmgPath" "$SOURCE_MANIFEST_AFTER_DMG"
 receipt_set_string "source.manifestAfterDmgSha256" "$SOURCE_SHA256_AFTER_DMG"
 if [ "$SOURCE_SHA256_AFTER_DMG" != "$SOURCE_SHA256_AFTER" ]; then
-  fail "DMG生成中にソースが変化しました。成果物を署名しません。"
+  fail "The source changed during DMG creation. The artifact will not be signed."
   exit 1
 fi
 
 CURRENT_STEP="dmg-signing"
-echo "==> DMG にTeam ${TEAM_ID}の証明書で署名"
+echo "==> Signing the DMG with Team ${TEAM_ID}'s certificate"
 codesign --force --sign "$SIGN_ID" --timestamp "$DMG" 2>&1 | sed 's/^/    /'
 codesign --verify --verbose=4 "$DMG" 2>&1 | sed 's/^/    /'
 DMG_TEAM_ID=$(codesign_team_id "$DMG")
 if [ "$DMG_TEAM_ID" != "$TEAM_ID" ]; then
-  fail "DMGのTeam ID不一致: $DMG_TEAM_ID"
+  fail "DMG Team ID mismatch: $DMG_TEAM_ID"
   exit 1
 fi
 
 CURRENT_STEP="dmg-content-verification"
-verify_dmg_contents "公証前検証"
+verify_dmg_contents "pre-notarization verification"
 receipt_set_string "artifacts.dmgLayout.preNotarizationVerification" "passed"
 
 if [ "$UNNOTARIZED" -eq 1 ]; then
@@ -1537,29 +1538,29 @@ if [ "$UNNOTARIZED" -eq 1 ]; then
   CURRENT_STEP="receipt-completion"
   complete_receipt "complete-unnotarized"
   CURRENT_STEP="complete"
-  warn "公証なし成果物です。Gatekeeperで拒否されるため正規配布には使用しないでください。"
-  green "検証用DMG: $DMG"
+  warn "This is an unnotarized artifact. Gatekeeper will reject it, so do not use it for regular distribution."
+  green "Verification DMG: $DMG"
   green "SHA-256: $DMG_HASH_FILE"
-  green "release記録: $PROVENANCE"
+  green "Release record: $PROVENANCE"
   exit 0
 fi
 
-# ---------- DMG 公証 ----------
+# ---------- DMG notarization ----------
 CURRENT_STEP="dmg-notarization"
-echo "==> DMG を公証（2/2）"
+echo "==> Notarizing the DMG (2/2)"
 submit_and_record_notarization "$DMG" "dmg"
 
 CURRENT_STEP="dmg-stapling"
-echo "==> ステープル"
+echo "==> Stapling"
 xcrun stapler staple "$DMG" | sed 's/^/    /'
 
-# ---------- 最終確認 ----------
+# ---------- Final verification ----------
 CURRENT_STEP="final-verification"
-echo "==> 最終確認"
+echo "==> Final verification"
 echo "  -- DMG --"
 spctl --assess --type open --context context:primary-signature -vv "$DMG" 2>&1 | sed 's/^/    /'
 xcrun stapler validate "$DMG" 2>&1 | sed 's/^/    /'
-verify_dmg_contents "最終成果物"
+verify_dmg_contents "final artifact"
 receipt_set_string "artifacts.dmgLayout.finalVerification" "passed"
 
 CURRENT_STEP="receipt-preparation"
@@ -1570,6 +1571,6 @@ CURRENT_STEP="receipt-completion"
 complete_receipt "complete"
 CURRENT_STEP="complete"
 
-green "できました: $DMG"
+green "Done: $DMG"
 green "SHA-256: $DMG_HASH_FILE"
-green "release記録: $PROVENANCE"
+green "Release record: $PROVENANCE"

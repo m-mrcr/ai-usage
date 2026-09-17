@@ -1,14 +1,14 @@
 import Foundation
 import Security
 
-/// 利用者が自分で貼り付けた claude.ai の session key を、AI Usage 専用の Keychain 項目へ置く。
+/// Places the claude.ai session key the user pasted in themselves into an AI Usage-only Keychain item.
 ///
-/// Claude Code の `Claude Code-credentials` には触れない。あちらへ書き込むと macOS が
-/// partition list を書き手へ差し替えてしまい、Claude Code 側がパスワードを繰り返し
-/// 求められるようになるため、共用そのものを避ける。
+/// Never touches Claude Code's `Claude Code-credentials`. Writing to that item would make macOS
+/// swap its partition list to the writer, causing Claude Code to repeatedly prompt for a password —
+/// so sharing it is avoided entirely.
 ///
-/// これはアカウント全体に効く認証情報で、スコープ付きOAuthトークンより権限が広い。
-/// 既定の取得経路にはせず、OAuth資格情報が無いときの任意手段として扱う。
+/// This is an account-wide credential with broader access than a scoped OAuth token.
+/// It's not made the default collection route, and is only used as an optional fallback when there are no OAuth credentials.
 enum ClaudeSessionKey {
     static let service = "jp.co.forestx.aiusage.claude-session"
     private static let store = WebSessionStore(service: service)
@@ -25,10 +25,10 @@ enum ClaudeSessionKey {
     @discardableResult
     static func remove() -> Bool { store.remove() }
 
-    /// 最後にログインした時刻。切れたときに古さを判断できるようにする。
+    /// The time of the last sign-in. Lets staleness be judged once it expires.
     static func savedAt() -> Date? { store.savedAt() }
 
-    /// `sessionKey=` 付きで貼られても、前後に空白や後続のCookieが入っても受け取れるようにする。
+    /// Accepts the value whether it's pasted with a `sessionKey=` prefix, surrounding whitespace, or trailing cookies.
     static func normalized(_ raw: String) -> String {
         var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         if let range = value.range(of: "sessionKey=") {
@@ -40,7 +40,7 @@ enum ClaudeSessionKey {
         return value.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// Cookie値として送れる文字だけを許す。
+    /// Only allows characters that can be sent as a cookie value.
     static func isValid(_ value: String) -> Bool {
         guard value.count >= 16, value.utf8.count <= 4_096 else { return false }
         return value.unicodeScalars.allSatisfy {

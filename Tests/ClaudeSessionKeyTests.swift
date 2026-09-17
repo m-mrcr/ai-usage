@@ -2,8 +2,8 @@ import Foundation
 import XCTest
 
 final class ClaudeSessionKeyTests: XCTestCase {
-    /// ブラウザからのコピーは `sessionKey=...; other=...` の形になりやすい。
-    /// そのまま保存するとCookieヘッダが壊れるので、値だけを取り出す。
+    /// A copy from the browser tends to come in as `sessionKey=...; other=...`.
+    /// Saving it as-is would break the Cookie header, so only the value is extracted.
     func testNormalizationExtractsTheValueFromAPastedCookie() {
         let expected = String(repeating: "a", count: 40)
 
@@ -16,7 +16,7 @@ final class ClaudeSessionKeyTests: XCTestCase {
         )
     }
 
-    /// Cookieヘッダへ差し込む値なので、区切り文字や制御文字は通さない。
+    /// Since this value is spliced into a Cookie header, delimiter or control characters aren't allowed through.
     func testValidationRejectsValuesThatWouldBreakTheCookieHeader() {
         let valid = String(repeating: "b", count: 40)
         XCTAssertTrue(ClaudeSessionKey.isValid(valid))
@@ -30,7 +30,7 @@ final class ClaudeSessionKeyTests: XCTestCase {
         XCTAssertFalse(ClaudeSessionKey.isValid(String(repeating: "c", count: 5_000)))
     }
 
-    /// 組織IDはURLへ差し込むので、経路を書き換えられる文字を通してはいけない。
+    /// Since the organization ID is spliced into a URL, characters that could rewrite the path must not be allowed through.
     func testOrganizationIdentifierRejectsPathTraversal() {
         XCTAssertTrue(
             ClaudeWebUsageAPI.isSafeIdentifier("0b8c1e2f-3a4b-5c6d-7e8f-9a0b1c2d3e4f")

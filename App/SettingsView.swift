@@ -8,8 +8,8 @@ struct SettingsView: View {
 
     private var language: AppLanguage { model.language }
 
-    /// 「3か月前」のように経過で見せる。日付から引き算させるより、
-    /// セッションが古いかどうかの判断に直結する。
+    /// Shown as elapsed time, e.g. "3 months ago". This maps more directly to
+    /// judging whether the session is stale than making the user subtract dates themselves.
     private func relativeSavedAt(_ date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.locale = language.locale
@@ -87,7 +87,7 @@ struct SettingsView: View {
                 }
             }
 
-            // 状態で出し入れすると存在に気づけず、環境を移したときに探せない。常に出す。
+            // Showing/hiding this based on state would make it undiscoverable and hard to find after switching environments. Always show it.
             Section(L10n.text("settings.claudeSession", language: language)) {
                 Text(L10n.text("settings.claudeSession.detail", language: language))
                     .font(.caption)
@@ -322,7 +322,7 @@ private struct AgentToggle: View {
         return [visibility, subtitle].joined(separator: language == .japanese ? "、" : ", ")
     }
 
-    /// 取得元と状態を一行で示す。伏せる判断の材料になる。
+    /// Shows the source and status in one line. Helps decide whether to hide it.
     private var subtitle: String {
         switch agent.displayStatus {
         case .notInstalled:

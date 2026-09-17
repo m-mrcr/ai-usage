@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-/// Dock アイコンから開くウィンドウ。
-/// メニューバー常駐だけだと Dock を押しても出す物が無いので、同じ内容を独立窓でも見せる。
+/// The window opened from the Dock icon.
+/// With just the menu bar residency, clicking the Dock icon has nothing to show, so the same content is also shown in a standalone window.
 @MainActor
 final class UsageWindowController {
     private var window: NSWindow?
@@ -13,8 +13,8 @@ final class UsageWindowController {
                 rootView: UsagePopoverView(model: model, showsQuit: false).frame(width: 340)
             )
             let created = NSWindow(contentViewController: hosting)
-            // title は「ウィンドウ」メニューや支援技術のために残しつつ、
-            // タイトルバーには描かせない。名前はコンテンツ側の見出しが持つ。
+            // Keep the title for the "Window" menu and assistive technologies,
+            // but don't draw it in the title bar — the heading name lives in the content instead.
             created.title = "AI Usage"
             created.titleVisibility = .hidden
             created.titlebarAppearsTransparent = true
@@ -33,7 +33,7 @@ final class UsageWindowController {
     }
 }
 
-/// 設定ウィンドウ。メニューバーのポップオーバーからは開けない大きさなので独立させる。
+/// The settings window. Made standalone since its size doesn't fit inside the menu bar popover.
 @MainActor
 final class SettingsWindowController {
     private var window: NSWindow?
@@ -61,7 +61,7 @@ final class SettingsWindowController {
     }
 }
 
-/// Staleの意味と、エージェント別の対処方法を表示する独立ウィンドウ。
+/// A standalone window explaining what Stale means and how to fix it per agent.
 @MainActor
 final class HelpWindowController {
     private var window: NSWindow?
@@ -89,9 +89,9 @@ final class HelpWindowController {
     }
 }
 
-/// Dock アイコンのクリックを拾うためだけのデリゲート。
+/// A delegate that exists only to catch clicks on the Dock icon.
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    /// Dock からの再表示要求。UsageModel 側で差し替える。
+    /// A reopen request from the Dock. Overridden on the UsageModel side.
     @MainActor static var onReopen: (() -> Void)?
 
     func applicationShouldHandleReopen(_ sender: NSApplication,

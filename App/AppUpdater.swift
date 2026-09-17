@@ -1,8 +1,8 @@
 import Combine
 import Sparkle
 
-/// Sparkleの標準UIと設定値を、SwiftUIから扱うための小さな橋渡し。
-/// 更新設定の保存はSparkle自身に任せ、アプリ独自のUserDefaultsは重ねない。
+/// A small bridge for handling Sparkle's standard UI and settings from SwiftUI.
+/// Leaves saving update settings to Sparkle itself, without layering the app's own UserDefaults on top.
 @MainActor
 final class AppUpdater: ObservableObject {
     @Published private(set) var canCheckForUpdates = false

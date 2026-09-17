@@ -1,8 +1,8 @@
 #!/bin/bash
-# Claude Code の statusLine から呼ばれる。
-#   1) 受け取った JSON の rate_limits を AIUsage 用に保存（ウィジェットのデータ源）
-#   2) ステータス行そのものを標準出力に出す
-# stdin の JSON 仕様: https://code.claude.com/docs/en/statusline
+# Called from Claude Code's statusLine.
+#   1) Saves the received JSON's rate_limits for AIUsage (the widget's data source)
+#   2) Prints the status line itself to stdout
+# stdin's JSON spec: https://code.claude.com/docs/en/statusline
 set -uo pipefail
 umask 077
 
@@ -11,7 +11,7 @@ OUT_DIR="$HOME/Library/Application Support/AIUsage"
 /bin/mkdir -p "$OUT_DIR"
 /bin/chmod 700 "$OUT_DIR" 2>/dev/null || true
 
-# --- 0) 生ペイロードを記録（明示的に AIUSAGE_DEBUG=1 のときだけ）---------------
+# --- 0) Record the raw payload (only when AIUSAGE_DEBUG=1 is explicitly set) ---------------
 if [ "${AIUSAGE_DEBUG:-0}" = "1" ]; then
   RAW_LOG="$OUT_DIR/statusline-raw.log"
   RAW_MAX_BYTES=262144
@@ -31,8 +31,8 @@ if [ "${AIUSAGE_DEBUG:-0}" = "1" ]; then
   fi
 fi
 
-# --- 1) 残量を保存 -----------------------------------------------------------
-# rate_limits は Claude.ai サブスク（Pro/Max）で、セッション内の最初の応答後に付く。
+# --- 1) Save the remaining allowance -----------------------------------------------------------
+# rate_limits is attached for Claude.ai subscriptions (Pro/Max), after the first response in a session.
 printf '%s' "$INPUT" | /usr/bin/python3 -c '
 import json, sys, os, tempfile
 
@@ -99,7 +99,7 @@ finally:
             pass
 ' 2>/dev/null
 
-# --- 2) ステータス行を描画 ---------------------------------------------------
+# --- 2) Render the status line ---------------------------------------------------
 printf '%s' "$INPUT" | /usr/bin/python3 -c '
 import json, sys, os
 

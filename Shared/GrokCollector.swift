@@ -1,9 +1,9 @@
 import Foundation
 
-/// Grok の残量。
+/// Grok's remaining allowance.
 ///
-/// Grok は `~/.grok/logs/unified.jsonl` に `billing: fetched credits config` を書き残す。
-/// `creditUsagePercent`（0 のときは省略される）と週次期間の終了時刻が入っている。
+/// Grok writes `billing: fetched credits config` into `~/.grok/logs/unified.jsonl`.
+/// It contains `creditUsagePercent` (omitted when 0) and the weekly period's end time.
 enum GrokCollector {
     private static let logURL = URL(fileURLWithPath: NSHomeDirectory())
         .appendingPathComponent(".grok/logs/unified.jsonl")
@@ -27,7 +27,7 @@ enum GrokCollector {
                               note: "Run Grok once to populate its billing log")
         }
 
-        // creditUsagePercent は 0 のとき省略されるため、欠落は 0 とみなす。
+        // creditUsagePercent is omitted when 0, so a missing value is treated as 0.
         let window = UsageWindow(
             id: "grok_period",
             label: hit.isWeekly ? "7d" : "Period",
@@ -97,7 +97,7 @@ enum GrokCollector {
                 else { continue }
                 usedPercent = parsed
             } else {
-                // 現行 Grok は 0 のときだけフィールド自体を省略する。
+                // The current Grok only omits the field itself when it's 0.
                 usedPercent = 0
             }
 

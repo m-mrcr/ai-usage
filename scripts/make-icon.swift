@@ -3,11 +3,11 @@ import CoreGraphics
 import CoreText
 import Foundation
 
-// アプリアイコンを描いて .iconset を吐く。
-// 意匠: 下が開いた 240° のゲージ。アプリ内のバーと同じ緑→黄→赤の配色を使う。
+// Draws the app icon and outputs an .iconset.
+// Design: a 240° gauge open at the bottom, using the same green-to-yellow-to-red palette as the in-app bar.
 
 let canvas = 1024.0
-let inset = 100.0                    // macOS の角丸アイコンは周囲に余白を取る
+let inset = 100.0                    // macOS's rounded-rect icon leaves a margin around the edge
 let plate = canvas - inset * 2
 let cornerRadius = 185.0
 
@@ -19,7 +19,7 @@ let calm = (0.24, 0.78, 0.51)
 let moderate = (0.95, 0.76, 0.22)
 let critical = (0.94, 0.33, 0.35)
 
-/// 3 色を 0...1 で線形補間。
+/// Linearly interpolates the 3 colors over 0...1.
 func rampColor(_ t: Double) -> CGColor {
     let clamped = min(max(t, 0), 1)
     let (from, to, local): ((Double, Double, Double), (Double, Double, Double), Double) =
@@ -34,25 +34,25 @@ func rampColor(_ t: Double) -> CGColor {
 }
 
 
-/// アイコンの文字に使うフォント。
-/// PNG に焼いてからバンドルするので、これが要るのはビルドするマシンだけ。
-/// 配布先には影響しない。
+/// The font used for the icon's text.
+/// Since it's baked into a PNG before bundling, this is only needed on the build machine.
+/// It has no effect on the distributed target.
 func iconFont(pointSize: CGFloat) -> NSFont {
     let candidates = ["NotoSansJP-Black", "NotoSansJP-Bold", "NotoSans-Black", "NotoSans-Bold"]
     for name in candidates {
         if let font = NSFont(name: name, size: pointSize) { return font }
     }
     FileHandle.standardError.write(Data(
-        "warning: Noto Sans が見つかりません。システムフォントで描画します。\n".utf8))
+        "warning: Noto Sans not found. Falling back to the system font.\n".utf8))
     let base = NSFont.systemFont(ofSize: pointSize, weight: .heavy)
     return base.fontDescriptor.withDesign(.rounded)
         .flatMap { NSFont(descriptor: $0, size: pointSize) } ?? base
 }
 
-/// 弧の内側に文字を置く。
+/// Places text inside the arc.
 ///
-/// 和文フォントは行の高さが欧文より大きく、ascent/descent で中央を取ると上にずれる。
-/// 実際の字形の外接矩形（ink bounds）を基準に合わせる。
+/// A Japanese font's line height is taller than a Latin one, so centering via ascent/descent
+/// drifts upward. Uses the actual glyph shapes' bounding box (ink bounds) as the reference instead.
 func drawCentered(_ text: String, in context: CGContext,
                   center: CGPoint, pointSize: CGFloat) {
     let attributed = NSAttributedString(string: text, attributes: [
@@ -63,7 +63,7 @@ func drawCentered(_ text: String, in context: CGContext,
     let line = CTLineCreateWithAttributedString(attributed)
     let ink = CTLineGetBoundsWithOptions(line, .useGlyphPathBounds)
 
-    // ink は描画原点からの相対なので、その中心を center に合わせる
+    // ink is relative to the drawing origin, so align its center to `center`
     context.textPosition = CGPoint(x: center.x - ink.midX,
                                    y: center.y - ink.midY)
     CTLineDraw(line, context)
@@ -81,7 +81,7 @@ func makeImage(size: Double) -> CGImage {
     context.setAllowsAntialiasing(true)
     context.interpolationQuality = .high
 
-    // --- 台座 ---
+    // --- Base plate ---
     let plateRect = CGRect(x: inset, y: inset, width: plate, height: plate)
     let platePath = CGPath(roundedRect: plateRect,
                            cornerWidth: cornerRadius, cornerHeight: cornerRadius,
@@ -101,7 +101,7 @@ func makeImage(size: Double) -> CGImage {
     )
     context.restoreGState()
 
-    // 上端のふちに軽くハイライトを入れて板っぽさを出す
+    // Adds a subtle highlight along the top edge to give it a plate-like feel
     context.saveGState()
     context.addPath(platePath)
     context.setLineWidth(3)
@@ -109,31 +109,31 @@ func makeImage(size: Double) -> CGImage {
     context.strokePath()
     context.restoreGState()
 
-    // --- ゲージ ---
+    // --- Gauge ---
     let center = CGPoint(x: canvas / 2, y: canvas / 2 - 40)
     let radius = 268.0
     let lineWidth = 104.0
-    let startAngle = 210.0 * .pi / 180      // 左下
-    let sweep = 240.0 * .pi / 180           // 上を通って右下まで
-    let filled = 0.66                        // 塗り分けの位置
+    let startAngle = 210.0 * .pi / 180      // bottom left
+    let sweep = 240.0 * .pi / 180           // through the top, to the bottom right
+    let filled = 0.66                        // where the fill color transitions
 
     context.setLineCap(.round)
     context.setLineWidth(lineWidth)
 
-    // 軌道
+    // Track
     context.setStrokeColor(srgb(1, 1, 1, 0.11))
     context.addArc(center: center, radius: radius,
                    startAngle: startAngle, endAngle: startAngle - sweep,
                    clockwise: true)
     context.strokePath()
 
-    // 塗り。円弧に沿った階調は細かい区間の連続で表現する。
+    // Fill. The gradient along the arc is rendered as a series of fine segments.
     let steps = 160
     let fillSweep = sweep * filled
     for step in 0..<steps {
         let t0 = Double(step) / Double(steps)
         let t1 = Double(step + 1) / Double(steps)
-        // 区間を少し重ねて継ぎ目を消す
+        // Overlap segments slightly to hide the seams
         let a0 = startAngle - fillSweep * t0
         let a1 = startAngle - fillSweep * min(t1 + 0.35 / Double(steps), 1)
         context.setStrokeColor(rampColor(t0 * filled / 0.9))
@@ -143,14 +143,14 @@ func makeImage(size: Double) -> CGImage {
         context.strokePath()
     }
 
-    // --- 文字 ---
+    // --- Text ---
     drawCentered("AI", in: context, center: CGPoint(x: center.x, y: center.y - 6),
                  pointSize: 214)
 
     return context.makeImage()!
 }
 
-// --- 書き出し ---
+// --- Export ---
 let outputDir = CommandLine.arguments.count > 1
     ? CommandLine.arguments[1]
     : "./AppIcon.iconset"

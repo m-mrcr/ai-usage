@@ -1,9 +1,9 @@
 import Foundation
 
-/// アプリ本体とウィジェット拡張の受け渡し場所。
+/// The handoff point between the main app and the widget extension.
 ///
-/// App Groupには表示許可済みの値だけを公開し、全件cacheは本体専用の
-/// Application Supportへ分離する。
+/// The App Group publishes only values cleared for display; the full cache is kept separate,
+/// in an Application Support directory private to the main app.
 enum SnapshotStore {
     static let appGroupID = "WTKUV8PPM7.jp.co.forestx.aiusage"
     private static let maximumSnapshotBytes = 1_048_576
@@ -47,12 +47,12 @@ enum SnapshotStore {
         return directory
     }
 
-    /// Widget/AppIntentが参照する公開snapshot。App Group不通時はnil。
+    /// The published snapshot that Widget/AppIntent reference. nil if the App Group is unreachable.
     static var snapshotURL: URL? {
         try? publishedDirectory().appendingPathComponent("snapshot.json")
     }
 
-    /// Claude CodeのstatusLineシムが書く本体専用データ。
+    /// Main-app-only data written by Claude Code's statusLine shim.
     static var claudeURL: URL {
         let directory = (try? privateDirectory()) ?? FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Application Support/AIUsage", isDirectory: true)
@@ -72,8 +72,8 @@ enum SnapshotStore {
         return decoder
     }
 
-    /// Widget向けの互換API。失敗は空表示にし、期限切れの値は
-    /// 本体が起動していない間も公開snapshotから除外する。
+    /// A compatibility API for the widget. Failures show as empty, and an expired value is
+    /// excluded from the published snapshot even while the main app isn't running.
     static func load() -> UsageSnapshot {
         ((try? loadPublished()) ?? .empty).expiringStaleData()
     }
@@ -152,6 +152,17 @@ enum SnapshotStore {
                   agent.plan.map(safeText) ?? true,
                   agent.note.map(safeText) ?? true
             else { throw StoreError.invalidSnapshot("oversized agent fields") }
+            if let resetCredits = agent.resetCredits {
+                guard (0...9_999).contains(resetCredits.available) else {
+                    throw StoreError.invalidSnapshot("invalid reset credits")
+                }
+            }
+            if let extraUsage = agent.extraUsage {
+                guard extraUsage.used.isFinite, extraUsage.limit.isFinite,
+                      (0...1_000_000).contains(extraUsage.used),
+                      (0...1_000_000).contains(extraUsage.limit)
+                else { throw StoreError.invalidSnapshot("invalid extra usage") }
+            }
             if let observedAt = agent.observedAt,
                !plausibleObservationDate(observedAt, now: now) {
                 throw StoreError.invalidSnapshot("invalid observation date")

@@ -1,11 +1,11 @@
 import Foundation
 import Security
 
-/// アプリ内ログインで受け取ったセッションを、AI Usage 専用の Keychain 項目へ置く。
+/// Places a session captured via in-app sign-in into an AI Usage-only Keychain item.
 ///
-/// 他アプリの認証情報には読み書きとも触れない。共用すると macOS が partition list を
-/// 書き手へ差し替え、相手側がパスワードを繰り返し求められるようになるため、
-/// 取得経路ごとに自前の項目を持つ。
+/// Never reads or writes another app's credentials. Sharing one would make macOS swap its
+/// partition list to the writer, causing the other side to be repeatedly prompted for a
+/// password — so each collection route keeps its own item.
 struct WebSessionStore {
     let service: String
 
@@ -53,8 +53,8 @@ struct WebSessionStore {
         ) == errSecSuccess
     }
 
-    /// 最後に保存した時刻。セッションが切れたときに「いつログインしたか」を示す。
-    /// 中身に触れずKeychainの属性だけを読むので、値の復号は起きない。
+    /// The time it was last saved. Shows "when did I sign in" once the session expires.
+    /// Reads only Keychain's attributes without touching the contents, so no decryption of the value happens.
     func savedAt() -> Date? {
         var item: CFTypeRef?
         let status = SecItemCopyMatching(

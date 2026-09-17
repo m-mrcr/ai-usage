@@ -1,10 +1,10 @@
 import Foundation
 
-/// Claude Code の `/usage` が叩くのと同じ OAuth エンドポイント。
+/// The same OAuth endpoint Claude Code's `/usage` hits.
 ///
-/// statusLine と違い、Claude Code が動いていなくても現在値を取れる。
-/// ただし User-Agent が `claude-code/<version>` でないと厳しい 429 バケットに落ちるため、
-/// ヘッダを揃えたうえで最短 180 秒間隔に制限する。
+/// Unlike statusLine, this can get the current value even when Claude Code isn't running.
+/// However, without a User-Agent of `claude-code/<version>` it falls into a strict 429 bucket,
+/// so the headers are matched and requests are capped to at most every 180 seconds.
 actor ClaudeUsageAPI {
     static let shared = ClaudeUsageAPI()
 
@@ -28,22 +28,22 @@ actor ClaudeUsageAPI {
         let payload: Payload
         let observedAt: Date
         let plan: String?
-        /// 最後の通信が失敗した、または実測から 6 時間以上経っている。
+        /// The last request failed, or it's been 6+ hours since the real measurement.
         let isStale: Bool
-        /// キャッシュをStale表示している場合の直近失敗理由。
+        /// The most recent failure reason, when the cache is being shown as Stale.
         let failureReason: FailureReason?
     }
 
     enum FailureReason: Sendable {
         case credentialUnavailable
         case credentialExpired
-        /// Claudeにはログイン済みだが、CLIのOAuthトークンがKeychainに無い。
-        /// デスクトップ版だけを使っている場合はこの状態のまま変わらない。
+        /// Signed in to Claude, but the CLI's OAuth token isn't in Keychain.
+        /// Using only the desktop app leaves this state unchanged.
         case terminalSignInRequired
-        /// 期限切れだが、更新はターミナル版CLIに任せる。
-        /// refresh tokenは回転するので、2か所から更新しない。
+        /// Expired, but refreshing is left to the terminal CLI.
+        /// The refresh token rotates, so it isn't refreshed from two places.
         case refreshDeferredToCLI
-        /// 設定済みのsession keyが claude.ai に拒否された。
+        /// The configured session key was rejected by claude.ai.
         case sessionKeyRejected
         case unauthorized
         case rateLimited
@@ -61,7 +61,7 @@ actor ClaudeUsageAPI {
         return formatter.date(from: text) ?? ISO8601DateFormatter().date(from: text)
     }
 
-    /// 180 秒 TTL。60 秒ごとのリフレッシュから呼ばれても実際の通信は 3 分に 1 回。
+    /// A 180-second TTL. Even when called from a 60-second refresh loop, actual requests happen only once every 3 minutes.
     private static let minimumInterval: TimeInterval = 180
     private static let staleInterval: TimeInterval = 6 * 3_600
     private static let maximumBackoff: TimeInterval = 30 * 60
@@ -77,7 +77,7 @@ actor ClaudeUsageAPI {
         case success(Payload, plan: String?)
         case rateLimited(retryAt: Date?)
         case credentialUnavailable
-        /// Keychainの許可ダイアログで拒否された、または応答が無かった。
+        /// Denied at Keychain's permission dialog, or there was no response.
         case keychainAccessDenied
         case credentialExpired
         case terminalSignInRequired
@@ -85,7 +85,7 @@ actor ClaudeUsageAPI {
         case unauthorized
         case forbidden
         case failed
-        /// 設定したsession keyが拒否された。貼り直しが要る。
+        /// The configured session key was rejected. It needs to be pasted in again.
         case sessionKeyRejected
     }
 
@@ -95,11 +95,11 @@ actor ClaudeUsageAPI {
     private var lastFailure: FailureReason?
     private var inFlight: (id: UUID, task: Task<AttemptOutcome, Never>)?
 
-    /// 直近の取得結果。通信できなければキャッシュ、無ければ失敗理由を返す。
+    /// The most recent fetch result. Returns the cache if the request can't be made, or the failure reason if there's no cache.
     func fetch(force: Bool = false) async -> FetchResponse {
         let now = Date()
 
-        // Actor は await 中に再入されるため、進行中の通信を明示的に共有する。
+        // An actor can be reentered during an await, so explicitly share an in-flight request.
         if let inFlight {
             return await completeAttempt(id: inFlight.id, task: inFlight.task)
         }
@@ -130,7 +130,7 @@ actor ClaudeUsageAPI {
         let outcome = await task.value
         let now = Date()
 
-        // 同じ Task を待った複数 caller のうち、最初に Actor へ戻ったものだけが反映する。
+        // Of multiple callers awaiting the same Task, only the first one back on the actor applies the result.
         if inFlight?.id == id {
             inFlight = nil
             apply(outcome, now: now)
@@ -156,8 +156,8 @@ actor ClaudeUsageAPI {
             recordFailure(now: now, reason: .credentialUnavailable)
 
         case .keychainAccessDenied:
-            // 定期更新のたびに聞き直すと、断ったダイアログが出続ける。
-            // 次に聞くのは再確認など利用者の操作（force）があったときだけ。
+            // Asking again on every periodic refresh would keep showing a dialog the user already dismissed.
+            // Ask again only on a user action such as "check again" (force).
             consecutiveFailures += 1
             nextAttemptAt = .distantFuture
             lastFailure = .credentialUnavailable
@@ -221,9 +221,9 @@ actor ClaudeUsageAPI {
             credential = current
 
         case let .refreshable(expired):
-            // CLIが居るなら書き戻さない。奪い合いを起こさず、更新はCLIに委ねる。
-            // ただしCLIをしばらく使っていないと期限切れのまま古い値が残るので、
-            // session keyがあるならそちらで読む。
+            // If the CLI is present, don't write back — avoid fighting over it and leave refreshing to the CLI.
+            // But if the CLI hasn't been used in a while, a stale expired value can linger, so
+            // read from the session key instead, if one is set.
             if ClaudeKeychain.terminalCLIInstalled() {
                 return await sessionKeyOutcome() ?? .refreshDeferredToCLI
             }
@@ -243,9 +243,9 @@ actor ClaudeUsageAPI {
             }
 
         case let .unavailable(failure):
-            // OAuth資格情報が無い環境（デスクトップ版アプリのみなど）向けの任意経路。
-            // 設定されている場合だけ使い、Claude CodeのKeychain項目には触れない。
-            // ここはOAuth側に手が無い。失敗理由もsession key側のものをそのまま伝える。
+            // An optional route for environments with no OAuth credentials (e.g. desktop app only).
+            // Used only if configured, and never touches Claude Code's Keychain item.
+            // There's nothing more the OAuth side can do here, so report the session key side's failure reason as-is.
             if let outcome = await sessionKeyOutcome(reportingFailure: true) { return outcome }
             switch failure {
             case .expired:
@@ -253,7 +253,7 @@ actor ClaudeUsageAPI {
             case .notLinked:
                 return .terminalSignInRequired
             case .notFound:
-                // Claudeにログイン済みなら、足りないのはターミナル版CLIのログインだけ。
+                // If already signed in to Claude, all that's missing is the terminal CLI sign-in.
                 return ClaudeKeychain.hasSignedInAccount()
                     ? .terminalSignInRequired
                     : .credentialUnavailable
@@ -275,7 +275,7 @@ actor ClaudeUsageAPI {
             return await sessionKeyOutcome() ?? .refreshDeferredToCLI
         }
 
-        // 401時はKeychainを再読込し、兄弟更新がなければ強制refreshして1回だけ再試行する。
+        // On a 401, reload Keychain, and if there's no sibling update, force a refresh and retry exactly once.
         switch await ClaudeOAuthRefresher.refresh(credential, force: true) {
         case let .credential(refreshed):
             return await perform(
@@ -295,11 +295,11 @@ actor ClaudeUsageAPI {
         }
     }
 
-    /// 設定済みのsession keyで読む。未設定ならnil。
+    /// Reads with the configured session key. nil if none is set.
     ///
-    /// OAuth側にまだ打つ手がある場面（CLIで更新できる、など）では、失敗しても
-    /// nilを返してOAuth側の案内を優先する。鍵が拒否されたことを伝えるべきなのは、
-    /// OAuth側に手が無く、この経路が唯一の頼りだった場合だけ。
+    /// In a scenario where OAuth still has options left (e.g. the CLI can refresh it), a failure here
+    /// still returns nil and defers to OAuth's guidance. The key's rejection should only be
+    /// surfaced when OAuth is out of options and this route was the last resort.
     private static func sessionKeyOutcome(
         reportingFailure: Bool = false
     ) async -> AttemptOutcome? {

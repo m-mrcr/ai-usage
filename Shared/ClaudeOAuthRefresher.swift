@@ -1,8 +1,8 @@
 import Foundation
 import Darwin
 
-/// Claude Codeと同じOAuth token endpointで、期限切れaccess tokenを更新する。
-/// refresh tokenは回転するため、Claude CodeのlockとKeychainのCAS条件を守る。
+/// Refreshes an expired access token at the same OAuth token endpoint Claude Code uses.
+/// Since the refresh token rotates, this honors Claude Code's lock and Keychain's CAS conditions.
 enum ClaudeOAuthRefresher {
     enum Outcome: Sendable {
         case credential(ClaudeKeychain.OAuthCredential)
@@ -70,7 +70,7 @@ enum ClaudeOAuthRefresher {
     ) async -> Outcome {
         guard lock.isValid else { return .temporarilyUnavailable }
 
-        // Claude Codeが先に更新していた場合は、その兄弟書込みを採用する。
+        // If Claude Code already refreshed it first, defer to that sibling write.
         let current: ClaudeKeychain.OAuthCredential
         switch ClaudeKeychain.credentialState() {
         case let .valid(credential):
@@ -83,7 +83,7 @@ enum ClaudeOAuthRefresher {
             }
             current = credential
         case let .refreshable(credential):
-            // 兄弟書込みでも期限が近い／切れていれば、その最新tokenを基準に更新を続ける。
+            // Even from a sibling write, if it's near or past expiry, continue refreshing based on that latest token.
             current = credential
         case .unavailable:
             return .keychainUnavailable
@@ -111,7 +111,7 @@ enum ClaudeOAuthRefresher {
            shouldExpandDefaultScopes,
            storedScopes.contains("user:inference"),
            storedScopes != requestScopes {
-            // Claude本体と同じく、default拡張が拒否された時だけ元の保存scopeで1回再試行する。
+            // As with Claude itself, retry once with the original stored scopes only if the default expansion was rejected.
             effectiveRequestScopes = storedScopes
             reply = await requestToken(
                 refreshToken: refreshToken,
@@ -120,15 +120,15 @@ enum ClaudeOAuthRefresher {
             )
         }
 
-        // 通信中にClaude側がstale lockを置換した場合、競合したKeychainへは書き込まない。
+        // If Claude replaced the stale lock during the request, don't write to the now-conflicting Keychain.
         guard lock.isValid else { return .temporarilyUnavailable }
 
         switch reply {
         case let .payload(payload):
             let rotatedRefreshToken = payload.refresh_token ?? refreshToken
             let expiresAt = Date().addingTimeInterval(payload.expires_in)
-            // tokenがすでに回転した後なので、response scopeの欠落・不正だけを理由に
-            // 書戻しを放棄せず、実際に成功したrequest scopeを保存する。
+            // The token has already rotated by this point, so don't abandon the write-back just
+            // because the response scope is missing or invalid — save the request scope that actually succeeded.
             let responseScopes = scopesForPersistence(
                 responseScopes: payload.scope,
                 effectiveRequestScopes: effectiveRequestScopes
@@ -149,7 +149,7 @@ enum ClaudeOAuthRefresher {
                 if case let .valid(credential) = state { return .credential(credential) }
                 return .keychainUnavailable
             case .failed:
-                // 回転後に保存できないとClaude Codeも古いtokenを持つため、値を成功扱いしない。
+                // If saving fails after rotation, Claude Code is left holding the stale token too, so don't treat this as success.
                 return .keychainUnavailable
             }
 
@@ -228,8 +228,8 @@ enum ClaudeOAuthRefresher {
         return result
     }
 
-    /// 通常更新では有効な現在値を再利用する。usage APIが401を返した強制更新時だけ、
-    /// 同じaccess tokenでもrefreshを続行する。兄弟processの更新値は常に採用する。
+    /// A normal refresh reuses the current valid value. Only on a forced refresh triggered by the
+    /// usage API returning 401 does it proceed to refresh even with the same access token. A sibling process's updated value is always adopted.
     static func shouldReuseCurrentAccessToken(
         _ currentAccessToken: String,
         originalAccessToken: String,
@@ -293,8 +293,8 @@ enum ClaudeOAuthRefresher {
     }
 }
 
-/// Claude Code 2.xが使うrefresh lockと競合しないための短時間lock。
-/// 二つ目を取れなければ一つ目を即座に解放し、deadlockを避ける。
+/// A short-lived lock that avoids conflicting with the refresh lock used by Claude Code 2.x.
+/// If the second lock can't be acquired, immediately release the first one, to avoid a deadlock.
 final class ClaudeOAuthRefreshLock: @unchecked Sendable {
     private final class HeartbeatState: @unchecked Sendable {
         private let lock = NSLock()
@@ -405,7 +405,7 @@ final class ClaudeOAuthRefreshLock: @unchecked Sendable {
     private static func acquire(_ url: URL) -> Entry? {
         if let info = fileInfo(at: url),
            Date().timeIntervalSince1970 - modificationTime(of: info) > 60 {
-            // Claude側も空directoryへrmdirする。中身がある場合は所有者不明なので触らない。
+            // Claude itself also rmdirs an empty directory. If it has contents, ownership is unclear, so leave it alone.
             _ = url.path.withCString { Darwin.rmdir($0) }
         }
 

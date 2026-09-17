@@ -1,7 +1,7 @@
 import SwiftUI
 
-/// メニューバー用のゲージ。アプリアイコンと同じ 240° の弧を、使用率ぶんだけ塗る。
-/// MenuBarExtra のラベルは複雑なビューを確実に描けないため、画像に焼いてから渡す。
+/// A gauge for the menu bar. Fills the same 240° arc as the app icon, by the usage percentage.
+/// MenuBarExtra's label can't reliably render a complex view, so this is baked into an image first.
 enum MenuBarGauge {
     static let side: CGFloat = 17
 
@@ -12,7 +12,7 @@ enum MenuBarGauge {
         )
         renderer.scale = 2
         guard let cgImage = renderer.cgImage else { return nil }
-        // テンプレート指定にすると単色化されて逼迫度の色が消えるので、あえて外す。
+        // Deliberately not marked as a template image — that would flatten it to one color and lose the severity color.
         let image = NSImage(cgImage: cgImage, size: NSSize(width: side, height: side))
         image.isTemplate = false
         return image
@@ -34,7 +34,7 @@ struct GaugeGlyph: View {
     }
 }
 
-/// 下が開いた 240° の弧。SwiftUI は y 下向きなので、角度が増える向きが見た目の時計回り。
+/// A 240° arc open at the bottom. SwiftUI's y-axis points down, so increasing angle appears clockwise.
 struct GaugeArc: Shape {
     let fraction: Double
 
@@ -43,8 +43,8 @@ struct GaugeArc: Shape {
         guard fraction > 0 else { return path }
         let center = CGPoint(x: rect.midX, y: rect.midY + 1)
         let radius = min(rect.width, rect.height) / 2 - 2.2
-        let start = Angle(degrees: 150)                     // 左下から
-        let end = start + Angle(degrees: 240 * fraction)    // 上を通って右下へ
+        let start = Angle(degrees: 150)                     // from the bottom left
+        let end = start + Angle(degrees: 240 * fraction)    // through the top, to the bottom right
         path.addArc(center: center, radius: radius,
                     startAngle: start, endAngle: end, clockwise: false)
         return path

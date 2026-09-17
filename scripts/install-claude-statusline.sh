@@ -1,6 +1,6 @@
 #!/bin/bash
-# ~/.claude/settings.json に statusLine を登録する（既存設定はバックアップ）。
-# 解除は scripts/uninstall-claude-statusline.sh。
+# Registers a statusLine in ~/.claude/settings.json (backs up the existing setting).
+# To remove it, use scripts/uninstall-claude-statusline.sh.
 set -euo pipefail
 umask 077
 
@@ -127,7 +127,7 @@ if (isinstance(old_state, dict)
         and old_state.get("version") == 1
         and current_exists
         and current == old_state.get("installed")):
-    # 再インストールやリポジトリ移動でも、最初に退避した値を維持する。
+    # Keep the originally saved-off value even across a reinstall or a repository move.
     had_previous = bool(old_state.get("had_previous"))
     previous = old_state.get("previous")
 else:
@@ -135,7 +135,7 @@ else:
     previous = current
 
 if current_exists and current != installed:
-    print("warning: 既存の statusLine を退避して AIUsage に置き換えます")
+    print("warning: saving off the existing statusLine and replacing it with AIUsage")
 
 state = {
     "version": 1,
@@ -144,7 +144,7 @@ state = {
     "previous": previous,
 }
 
-# 復元情報を先に永続化し、その後に settings を切り替える。
+# Persist the restore information first, then switch over the settings.
 assert_unchanged(path, original_settings)
 atomic_json(state_path, state, 0o600)
 settings["statusLine"] = installed
@@ -153,4 +153,4 @@ atomic_json(path, settings, settings_mode)
 print("backup:", backup)
 print("installed statusLine ->", installed["command"])
 PY
-echo "次に Claude Code を起動し、1 回応答を受け取ると残量が記録されます。"
+echo "Next, launch Claude Code — once you receive one response, usage will be recorded."

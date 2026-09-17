@@ -1,5 +1,3 @@
-[English](README.md) | [日本語](README.ja.md)
-
 <p align="center">
   <img src="docs/app-icon.png" width="128" height="128" alt="AI Usage app icon">
 </p>

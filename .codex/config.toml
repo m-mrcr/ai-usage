@@ -1,4 +1,4 @@
 
-# このプロジェクトはVercelを使わない。
+# This project does not use Vercel.
 [plugins."vercel@claude-plugins-official"]
 enabled = false

@@ -44,10 +44,10 @@ final class CodexCollectorTests: XCTestCase {
         try XCTUnwrap(CodexCollector.findRateLimits(in: ["rate_limits": raw]))
     }
 
-    /// Codexはプラン枠とモデル別枠を同じログへ書く。最後に書かれた1件を採ると、
-    /// 直前に使ったモデル次第で表示が入れ替わってしまう。
-    /// 実ログの `premium` バケットは primary/secondary とも null で届く。
-    /// これを窓ゼロのバケットとして採用すると、表示が空になってしまう。
+    /// Codex writes plan windows and per-model windows into the same log. Taking whichever was
+    /// written last would flip the display depending on which model was used most recently.
+    /// The real log's `premium` bucket arrives with both primary/secondary null.
+    /// Adopting this as a windowless bucket would leave the display empty.
     func testFindRateLimitsSkipsTheWindowlessBucket() {
         XCTAssertNil(CodexCollector.findRateLimits(in: ["rate_limits": [
             "limit_id": "premium",
@@ -71,7 +71,7 @@ final class CodexCollectorTests: XCTestCase {
             "primary": ["used_percent": 0, "window_minutes": 300],
             "secondary": ["used_percent": 0, "window_minutes": 10_080],
         ])
-        // 窓なしバケットはfindRateLimitsが弾くため、selectBucket側のguardを直接突く。
+        // A windowless bucket is rejected by findRateLimits, so this pokes selectBucket's guard directly.
         let premium = CodexCollector.RateLimits(
             primary: nil, secondary: nil, plan_type: "pro",
             limit_id: "premium", limit_name: nil
@@ -94,7 +94,7 @@ final class CodexCollectorTests: XCTestCase {
         )
     }
 
-    /// モデル別枠も一覧には出すが、0%のまま放置されがちなので代表値には使わない。
+    /// Per-model windows are shown in the list too, but since they tend to sit at 0% unused, they're never used as the representative value.
     func testModelBucketsBecomeSupplementaryWindowsAndNeverLeadTheSummary() throws {
         let model = try limits([
             "limit_id": "codex_bengalfox",
@@ -119,10 +119,10 @@ final class CodexCollectorTests: XCTestCase {
             observedAt: Date(), source: "session log", status: .ok, note: nil
         )
 
-        // 5時間枠のほうが短いが、0%の補助枠を見出しに出すと余裕があると誤読させる。
+        // The 5-hour window is shorter, but showing a 0% supplementary window in the headline would misleadingly suggest plenty of room.
         XCTAssertEqual(agent.headlineWindow?.usedPercent, 99)
         XCTAssertEqual(agent.tightestWindow?.usedPercent, 99)
-        // 一覧ではプラン枠が先、補助枠が後ろ。
+        // In the list, plan windows come first, supplementary ones come after.
         XCTAssertEqual(agent.displayWindows.map(\.isSupplementary), [false, true])
     }
 
@@ -176,8 +176,8 @@ final class CodexCollectorTests: XCTestCase {
         ]))
     }
 
-    /// 使っていないモデルの枠は0%のままなので、代わりに出すと余裕があると誤読させる。
-    /// 数字を出さず、モデル別枠しか無いことが分かる案内へ倒す。
+    /// An unused model's window stays at 0%, so showing it instead would misleadingly suggest plenty of room.
+    /// No number is shown; instead it falls back to guidance indicating only per-model windows exist.
     func testModelOnlyLogsProduceNoNumbersButAreDistinguishable() throws {
         let model = try limits([
             "limit_id": "codex_bengalfox",

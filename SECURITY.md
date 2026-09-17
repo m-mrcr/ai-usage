@@ -1,33 +1,33 @@
 # Security Policy
 
-## 脆弱性を報告する
+## Reporting a vulnerability
 
-脆弱性や、認証情報・個人情報が意図せず公開される問題を、公開ページやSNSへ書かないでください。
-この公開repositoryでは、GitHubの
-[Private Vulnerability Reporting](https://github.com/moritouch/ai-usage/security/advisories/new)から
-非公開で報告してください。通常のIssueには、未修正の脆弱性や秘密情報を投稿しないでください。
+Please do not write about a vulnerability, or about credentials/personal information being unintentionally exposed, on a public page or social media.
+For this public repository, report it privately through GitHub's
+[Private Vulnerability Reporting](https://github.com/moritouch/ai-usage/security/advisories/new).
+Do not post unfixed vulnerabilities or secret information in a regular issue.
 
-報告には、可能な範囲で次を含めてください。
+Where possible, please include:
 
-- AI Usageのバージョンとbuild番号
-- macOSのバージョン
-- 影響と再現条件の要約
-- 秘密情報を除いた最小限のエラー内容
+- The AI Usage version and build number
+- The macOS version
+- A summary of the impact and reproduction steps
+- The minimal error details needed, with secrets removed
 
-次の内容は送らないでください。
+Please do not send:
 
-- OAuth token、Authorization header、Keychainの内容
-- Claude Code、Codex、Grokの完全なJSONLログ
-- `statusline-raw.log`、snapshot、`settings.json`、statusLineのバックアップ
-- ユーザー名やホームディレクトリを含む未加工の画面・ログ
-- Developer ID秘密鍵、公証資格情報、CI secret
+- OAuth tokens, Authorization headers, or Keychain contents
+- Complete JSONL logs from Claude Code, Codex, or Grok
+- `statusline-raw.log`, snapshots, `settings.json`, or statusLine backups
+- Raw screenshots or logs containing usernames or home directory paths
+- Developer ID private keys, notarization credentials, or CI secrets
 
-## サポート対象
+## Supported versions
 
-セキュリティ修正は原則として最新の配布版で提供します。AI Usage 0.1.10以降は、
-設定の「アップデートを確認…」から署名済み更新フィードを確認できます。最初の
-公開Sparkle搭載版である0.1.10への移行だけは、公式製品ページの公証済みDMGと
-同じversion pathのSHA-256を確認して手動で置き換えてください。
+Security fixes are provided for the latest distributed release in principle. From AI Usage 0.1.10 onward,
+you can check the signed update feed from Settings > "Check for Updates…". Only the migration to 0.1.10,
+the first public release with Sparkle, requires a manual replacement — verify the SHA-256 for the same
+version path against the notarized DMG on the official product page.
 
-Appleの公証はマルウェア・署名上の自動確認であり、Appleによる機能、プライバシー、
-セキュリティ設計全体の承認や推奨を意味しません。
+Apple's notarization is an automated malware and signature check; it does not represent an endorsement
+or recommendation by Apple of the app's features, privacy, or overall security design.
