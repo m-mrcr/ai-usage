@@ -25,7 +25,8 @@ struct UsagePopoverView: View {
         let rows = visibleAgents.reduce(CGFloat.zero) { total, agent in
             let windowCount = max(1, agent.windows.count)
             let windowGaps = CGFloat(max(0, windowCount - 1)) * 7
-            return total + 41 + CGFloat(windowCount) * 31 + windowGaps
+            let extrasHeight: CGFloat = agent.extrasText(language: language) != nil ? 18 : 0
+            return total + 44 + CGFloat(windowCount) * 35 + windowGaps + extrasHeight
         }
         let gaps = CGFloat(max(0, visibleAgents.count - 1)) * 8
         let storageNotice: CGFloat = model.storageError == nil ? 0 : 44
@@ -303,12 +304,13 @@ struct AgentRow: View {
 
     private var content: some View {
         VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
+                ServiceMark(agent: agent, size: 22)
                 Text(agent.name)
-                    .font(.subheadline.weight(.semibold))
+                    .font(.title3.weight(.semibold))
                 if let plan = agent.plan {
                     Text(plan)
-                        .font(.caption2)
+                        .font(.caption)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
                         .background(.quaternary, in: Capsule())
@@ -320,7 +322,7 @@ struct AgentRow: View {
                             L10n.text("common.stale", language: language),
                             systemImage: "clock.badge.exclamationmark"
                         )
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(.primary)
                         .padding(.horizontal, 5)
                         .padding(.vertical, 1)
@@ -358,11 +360,17 @@ struct AgentRow: View {
                     L10n.agentNote(agent.note, language: language)
                         ?? L10n.text("common.noData", language: language)
                 )
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(agent.displayWindows) { window in
                     WindowBar(window: window, language: language)
+                }
+                if let extras = agent.extrasText(language: language) {
+                    Text(extras)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 34)
                 }
             }
 
@@ -378,7 +386,7 @@ struct AgentRow: View {
                                 .foregroundStyle(.orange)
                             Text(L10n.text(action.labelKey, language: language))
                         }
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.bordered)
 
@@ -387,7 +395,7 @@ struct AgentRow: View {
                             L10n.text("common.checkAgain", language: language),
                             systemImage: "arrow.clockwise"
                         )
-                        .font(.caption2.weight(.semibold))
+                        .font(.caption.weight(.semibold))
                     }
                     .buttonStyle(.bordered)
                     .disabled(isRefreshing)
@@ -442,31 +450,23 @@ struct WindowBar: View {
                     language: language
                 )
 
-                UsageBar(percent: window.usedPercent, height: 7, language: language)
+                UsageBar(percent: window.usedPercent, height: 9, language: language)
 
-                Text(window.usedText)
-                    .font(.caption.monospacedDigit().weight(.semibold))
+                Text(window.remainingValueText)
+                    .font(.title3.monospacedDigit().weight(.bold))
                     .foregroundStyle(.primary)
-                    .frame(width: 38, alignment: .trailing)
+                    .frame(width: 52, alignment: .trailing)
             }
 
-            HStack(spacing: 5) {
-                Text(
-                    L10n.format(
-                        "common.left.format",
-                        language: language,
-                        window.remainingValueText
-                    )
-                )
-                if let resetDate = window.resetsAt {
-                    Text("·")
+            if let resetDate = window.resetsAt {
+                HStack(spacing: 4) {
                     Text(L10n.text("common.reset", language: language))
                     Text(resetDate, style: .relative)
                 }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.leading, 34)
             }
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.leading, 32)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(

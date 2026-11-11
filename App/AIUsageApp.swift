@@ -18,25 +18,6 @@ struct AIUsageApp: App {
             )
         }
         .menuBarExtraStyle(.window)
-        .commands {
-            // The standard macOS spot. Reachable from the app menu while Settings or Help is open.
-            CommandGroup(after: .appInfo) {
-                CheckForUpdatesCommand(updater: model.updater, language: model.language)
-            }
-        }
-    }
-}
-
-/// The app menu's "Check for Updates…". Disabled while it can't be pressed, e.g. during a check.
-private struct CheckForUpdatesCommand: View {
-    @ObservedObject var updater: AppUpdater
-    let language: AppLanguage
-
-    var body: some View {
-        Button(L10n.text("settings.checkForUpdates", language: language)) {
-            updater.checkForUpdates()
-        }
-        .disabled(!updater.canCheckForUpdates)
     }
 }
 
@@ -54,7 +35,7 @@ struct MenuBarLabel: View {
                 } else {
                     Image(systemName: "gauge.with.dots.needle.bottom.50percent")
                 }
-                Text(headline.window.usedText)
+                Text(headline.window.remainingValueText)
                 if headline.agent.displayStatus == .stale {
                     Image(systemName: "exclamationmark.triangle.fill")
                         .font(.system(size: 8))
@@ -67,7 +48,7 @@ struct MenuBarLabel: View {
                     language: language,
                     headline.agent.name,
                     L10n.windowLabel(headline.window, language: language),
-                    headline.window.usedText,
+                    headline.window.remainingValueText,
                     headline.agent.displayStatus == .stale
                         ? L10n.text("menubar.staleSuffix", language: language)
                         : ""
@@ -99,9 +80,6 @@ final class UsageModel: ObservableObject {
     @Published private(set) var helpAgentID: String?
 
     @Published private(set) var language: AppLanguage = LanguagePreference.load()
-
-    /// Manages the main app's updates. Sparkle is not included in the Widget.
-    let updater = AppUpdater()
 
     /// The cards laid out on screen. While dragging, only this array is moved to show
     /// where a card will land; it's persisted on mouse-up. Kept separate so the order

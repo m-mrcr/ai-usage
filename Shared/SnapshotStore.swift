@@ -5,7 +5,7 @@ import Foundation
 /// The App Group publishes only values cleared for display; the full cache is kept separate,
 /// in an Application Support directory private to the main app.
 enum SnapshotStore {
-    static let appGroupID = "WTKUV8PPM7.jp.co.forestx.aiusage"
+    static let appGroupID = "Y45S2Q5K9V.com.martinmercer.aiusage"
     private static let maximumSnapshotBytes = 1_048_576
 
     enum StoreError: LocalizedError {

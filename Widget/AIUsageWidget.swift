@@ -71,12 +71,13 @@ struct AIUsageWidget: Widget {
         }
         .configurationDisplayName("AI Usage")
         .description(LocalizedStringKey("widget.description"))
-        .supportedFamilies([.systemSmall, .systemMedium])
+        .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
 
-/// Display is consistently "used". The bar's fill and its color intensity should point the same direction.
-/// A short window like the 5-hour one kicks in first during a session, so it's given emphasis.
+/// The displayed number is consistently remaining allowance (gas-tank style), while the bar's
+/// color intensity still tracks usage. A short window like the 5-hour one kicks in first during
+/// a session, so it's given emphasis.
 struct UsageWidgetView: View {
     @Environment(\.widgetFamily) private var family
     let snapshot: UsageSnapshot
@@ -131,6 +132,7 @@ struct UsageWidgetView: View {
         Group {
             switch family {
             case .systemSmall: small
+            case .systemLarge: large
             default: medium
             }
         }
@@ -142,17 +144,15 @@ struct UsageWidgetView: View {
     private var small: some View {
         VStack(alignment: .leading, spacing: 0) {
             if let headline = headline {
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(headline.agent.accent)
-                        .frame(width: 7, height: 7)
+                HStack(spacing: 6) {
+                    ServiceMark(agent: headline.agent, size: 18)
                     Text(headline.agent.name)
-                        .font(.system(size: 11, weight: .semibold))
+                        .font(.system(size: 14, weight: .semibold))
                         .lineLimit(1)
                         .minimumScaleFactor(0.75)
                     if headline.agent.displayStatus == .stale {
                         Image(systemName: "clock.badge.exclamationmark")
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(.orange)
                             .accessibilityLabel(
                                 L10n.text("widget.stale.accessibility", language: language)
@@ -165,16 +165,16 @@ struct UsageWidgetView: View {
                 Spacer(minLength: 4)
 
                 HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text(headline.window.usedText)
-                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                    Text(headline.window.remainingValueText)
+                        .font(.system(size: 50, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .minimumScaleFactor(0.5)
                         .lineLimit(1)
                         .accessibilityLabel(
                             L10n.format(
-                                "widget.used.accessibility.format",
+                                "widget.remaining.accessibility.format",
                                 language: language,
-                                headline.window.usedText
+                                headline.window.remainingValueText
                             )
                         )
                 }
@@ -186,10 +186,10 @@ struct UsageWidgetView: View {
                 if let resetDate = headline.window.resetsAt {
                     HStack(spacing: 4) {
                         Image(systemName: "clock")
-                            .font(.system(size: 9))
+                            .font(.system(size: 10))
                             .accessibilityHidden(true)
                         Text(resetDate, style: .relative)
-                            .font(.system(size: 10, weight: .medium))
+                            .font(.system(size: 12, weight: .medium))
                     }
                     .foregroundStyle(.secondary)
                     .padding(.top, 5)
@@ -210,18 +210,18 @@ struct UsageWidgetView: View {
                     Divider().padding(.vertical, 4)
                     HStack(spacing: 5) {
                         Text(L10n.windowLabel(secondary, language: language))
-                            .font(.system(size: 9, weight: .semibold))
+                            .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(.secondary)
-                        UsageBar(percent: secondary.usedPercent, height: 4, language: language)
+                        UsageBar(percent: secondary.usedPercent, height: 5, language: language)
                             .accessibilityHidden(true)
-                        Text(secondary.usedText)
-                            .font(.system(size: 9, weight: .semibold).monospacedDigit())
+                        Text(secondary.remainingValueText)
+                            .font(.system(size: 11, weight: .semibold).monospacedDigit())
                             .foregroundStyle(.primary)
                             .accessibilityLabel(
                                 L10n.format(
-                                    "widget.used.accessibility.format",
+                                    "widget.remaining.accessibility.format",
                                     language: language,
-                                    secondary.usedText
+                                    secondary.remainingValueText
                                 )
                             )
                     }
@@ -237,17 +237,10 @@ struct UsageWidgetView: View {
 
     private var medium: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("AI Usage")
-                    .font(.caption.weight(.semibold))
-                Spacer()
-            }
-            .padding(.bottom, 6)
-
             if visibleGroups.isEmpty {
                 emptyState
             } else {
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     ForEach(visibleGroups, id: \.agent.id) { group in
                         AgentGroupRow(
                             agent: group.agent,
@@ -258,6 +251,26 @@ struct UsageWidgetView: View {
                 }
             }
 
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Large: full detail, one card per agent
+
+    private var large: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if orderedAgents.isEmpty {
+                emptyState
+            } else {
+                ForEach(orderedAgents.prefix(4)) { agent in
+                    AgentDetailCard(
+                        agent: agent,
+                        windows: agent.displayWindows,
+                        language: language
+                    )
+                }
+            }
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -326,7 +339,7 @@ struct AgentGroupRow: View {
     let language: AppLanguage
 
     /// The name column's width. Used to wrap the EXTRAS row at the same position.
-    private static let leadingColumnWidth: CGFloat = 3 + 8 + 84 + 8
+    private static let leadingColumnWidth: CGFloat = 3 + 8 + 22 + 6 + 84 + 8
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
@@ -336,15 +349,17 @@ struct AgentGroupRow: View {
                     .fill(agent.accent)
                     .frame(width: 3)
 
+                ServiceMark(agent: agent, size: 22)
+
                 VStack(alignment: .leading, spacing: 1) {
                     HStack(spacing: 3) {
                         Text(agent.name)
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 14, weight: .semibold))
                             .lineLimit(1)
                             .minimumScaleFactor(0.75)
                         if agent.displayStatus == .stale {
                             Image(systemName: "clock.badge.exclamationmark")
-                                .font(.system(size: 8, weight: .semibold))
+                                .font(.system(size: 9, weight: .semibold))
                                 .foregroundStyle(.orange)
                                 .accessibilityLabel(
                                     L10n.text("widget.stale.accessibility", language: language)
@@ -353,7 +368,7 @@ struct AgentGroupRow: View {
                     }
                     if let plan = agent.plan {
                         Text(plan)
-                            .font(.system(size: 8))
+                            .font(.system(size: 10))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .minimumScaleFactor(0.7)
@@ -369,28 +384,29 @@ struct AgentGroupRow: View {
                                 emphasized: window.isShortWindow,
                                 language: language
                             )
-                            UsageBar(percent: window.usedPercent, height: 6, language: language)
-                            Text(window.usedText)
-                                .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                            UsageBar(percent: window.usedPercent, height: 7, language: language)
+                            Text(window.remainingValueText)
+                                .font(.system(size: 13, weight: .bold).monospacedDigit())
                                 .foregroundStyle(.primary)
-                                .frame(width: 30, alignment: .trailing)
+                                .frame(width: 38, alignment: .trailing)
                         }
                         .accessibilityElement(children: .ignore)
                         .accessibilityLabel(
                             L10n.format(
-                                "widget.agentUsed.accessibility.format",
+                                "widget.agentRemaining.accessibility.format",
                                 language: language,
                                 L10n.windowLabel(window, language: language),
-                                window.usedText
+                                window.remainingValueText
                             )
                         )
                     }
                 }
+                .frame(maxWidth: .infinity)
             }
 
             if let extras = agent.extrasText(language: language) {
                 Text(extras)
-                    .font(.system(size: 9, weight: .medium))
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
@@ -399,8 +415,95 @@ struct AgentGroupRow: View {
         }
         .padding(.vertical, 5)
         .padding(.horizontal, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(agent.accent.opacity(0.10))
+        )
+        .fixedSize(horizontal: false, vertical: true)
+    }
+}
+
+/// The large widget's full-detail card: logo, name, every window with its reset time, and extras.
+struct AgentDetailCard: View {
+    let agent: AgentUsage
+    let windows: [UsageWindow]
+    let language: AppLanguage
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Capsule().fill(agent.accent).frame(width: 3, height: 26)
+                ServiceMark(agent: agent, size: 26)
+                HStack(spacing: 5) {
+                    Text(agent.name)
+                        .font(.system(size: 17, weight: .bold))
+                        .lineLimit(1)
+                    if let plan = agent.plan {
+                        Text(plan)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    if agent.displayStatus == .stale {
+                        Image(systemName: "clock.badge.exclamationmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.orange)
+                            .accessibilityLabel(
+                                L10n.text("widget.stale.accessibility", language: language)
+                            )
+                    }
+                }
+                Spacer(minLength: 0)
+            }
+
+            ForEach(windows) { window in
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        WindowChip(
+                            window: window,
+                            emphasized: window.isShortWindow,
+                            language: language
+                        )
+                        UsageBar(percent: window.usedPercent, height: 9, language: language)
+                        Text(window.remainingValueText)
+                            .font(.system(size: 16, weight: .bold).monospacedDigit())
+                            .foregroundStyle(.primary)
+                            .frame(width: 50, alignment: .trailing)
+                    }
+                    if let resetDate = window.resetsAt {
+                        HStack(spacing: 4) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 10))
+                            Text(resetDate, style: .relative)
+                                .font(.system(size: 12, weight: .medium))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.leading, 38)
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    L10n.format(
+                        "widget.agentRemaining.accessibility.format",
+                        language: language,
+                        L10n.windowLabel(window, language: language),
+                        window.remainingValueText
+                    )
+                )
+            }
+
+            if let extras = agent.extrasText(language: language) {
+                Text(extras)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .padding(.leading, 34)
+            }
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .fill(agent.accent.opacity(0.10))
         )
         .fixedSize(horizontal: false, vertical: true)

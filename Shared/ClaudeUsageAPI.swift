@@ -22,6 +22,17 @@ actor ClaudeUsageAPI {
         let five_hour: Window?
         let seven_day: Window?
         let seven_day_opus: Window?
+        let extra_usage: ExtraUsagePayload?
+    }
+
+    /// Claude's pay-as-you-go usage. Confirmed against a real `/api/oauth/usage` response —
+    /// it's included in the same payload as the plan windows, under this key. `used_credits`
+    /// and `monthly_limit` are scaled by `decimal_places` (e.g. 516 at 2 places is $5.16).
+    struct ExtraUsagePayload: Decodable, Sendable {
+        let is_enabled: Bool?
+        let used_credits: Double?
+        let monthly_limit: Double?
+        let decimal_places: Int?
     }
 
     struct FetchResult: Sendable {
@@ -375,11 +386,26 @@ actor ClaudeUsageAPI {
         let result = Payload(
             five_hour: validWindow(payload.five_hour),
             seven_day: validWindow(payload.seven_day),
-            seven_day_opus: validWindow(payload.seven_day_opus)
+            seven_day_opus: validWindow(payload.seven_day_opus),
+            extra_usage: payload.extra_usage
         )
         guard result.five_hour != nil || result.seven_day != nil || result.seven_day_opus != nil
         else { return nil }
         return result
+    }
+
+    /// nil when extra usage isn't enabled, or the response's numbers don't make sense.
+    /// A limit of 0 or less is treated as "not enabled", so $0/$0 is never shown.
+    static func validatedExtraUsage(from payload: ExtraUsagePayload?) -> ExtraUsage? {
+        guard let payload, payload.is_enabled != false,
+              let usedCredits = payload.used_credits, usedCredits.isFinite, usedCredits >= 0,
+              let monthlyLimit = payload.monthly_limit, monthlyLimit.isFinite, monthlyLimit > 0
+        else { return nil }
+        let scale = pow(10, Double(payload.decimal_places ?? 2))
+        guard scale.isFinite, scale > 0 else { return nil }
+        let used = usedCredits / scale
+        let limit = monthlyLimit / scale
+        return ExtraUsage(used: min(used, limit * 10), limit: limit)
     }
 
     private static func retryDate(from response: HTTPURLResponse, now: Date) -> Date? {

@@ -9,18 +9,12 @@ import Foundation
 ///     but it's a fallback route that uses neither network nor Keychain.
 enum ClaudeCollector {
     static func collect(force: Bool = false) async -> AgentUsage {
-        var agent: AgentUsage
         switch await ClaudeUsageAPI.shared.fetch(force: force) {
         case let .result(live):
-            agent = fromAPI(live)
+            return fromAPI(live)
         case let .unavailable(reason):
-            agent = fromStatusLine(apiFailure: reason)
+            return fromStatusLine(apiFailure: reason)
         }
-        // If there are no credentials, ClaudeExtraUsageAPI immediately returns nil, so this is safe even when uninstalled.
-        if let extra = await ClaudeExtraUsageAPI.fetch(force: force) {
-            agent.extraUsage = ExtraUsage(used: extra.used, limit: extra.limit)
-        }
-        return agent
     }
 
     // MARK: - 1) OAuth API
@@ -49,7 +43,8 @@ enum ClaudeCollector {
             source: "usage API", status: result.isStale ? .stale : .ok,
             note: result.isStale
                 ? failureNote(result.failureReason)
-                : nil
+                : nil,
+            extraUsage: ClaudeUsageAPI.validatedExtraUsage(from: payload.extra_usage)
         )
     }
 

@@ -38,6 +38,16 @@ extension AgentUsage {
         }
     }
 
+    /// The bundled brand mark for this agent, if one is bundled in Assets.xcassets. Agents without
+    /// a bundled logo (Grok, Cursor, Gemini) fall back to a colored monogram at the display layer.
+    var logoImageName: String? {
+        switch id {
+        case "claude-code": return "ClaudeLogo"
+        case "codex": return "CodexLogo"
+        default: return nil
+        }
+    }
+
     /// Grok is a monochrome-family cool gray. Darker in light appearance, lighter in dark appearance, to preserve distinguishability.
     private var grokAccent: Color {
         Self.adaptive(

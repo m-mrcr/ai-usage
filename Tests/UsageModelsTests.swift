@@ -218,7 +218,7 @@ final class UsageModelsTests: XCTestCase {
                 language: .english,
                 "Codex", "7d", "56%", ""
             ),
-            "Codex, 7d, 56% used"
+            "Codex, 7d, 56% left"
         )
         XCTAssertEqual(
             L10n.format(
@@ -226,7 +226,7 @@ final class UsageModelsTests: XCTestCase {
                 language: .japanese,
                 "Codex", "7d", "56%", "、古いデータ"
             ),
-            "Codex、7d、使用済み56%、古いデータ"
+            "Codex、7d、残り56%、古いデータ"
         )
         XCTAssertEqual(
             L10n.windowLabel(

@@ -2,6 +2,11 @@ import SwiftUI
 
 /// The usage bar.
 ///
+/// Reads like a gas tank: the fill shows how much allowance is left, not how much has been
+/// used, so an empty-looking bar means "almost out" and a full one means "plenty left".
+/// The severity color still tracks usage (it gets more alarming as `percent` climbs), only the
+/// fill amount is inverted.
+///
 /// ProgressView's determinate fill isn't rendered by the widget's renderer — only the track
 /// gets drawn — so this is custom-drawn with shapes instead.
 struct UsageBar: View {
@@ -9,7 +14,7 @@ struct UsageBar: View {
     var height: CGFloat = 7
     let language: AppLanguage
 
-    private var fraction: Double { min(max(percent, 0), 100) / 100 }
+    private var remainingFraction: Double { 1 - min(max(percent, 0), 100) / 100 }
 
     var body: some View {
         GeometryReader { geometry in
@@ -17,7 +22,7 @@ struct UsageBar: View {
                 Capsule()
                     .fill(Color.primary.opacity(0.12))
 
-                if fraction > 0 {
+                if remainingFraction > 0 {
                     Capsule()
                         .fill(
                             LinearGradient(
@@ -27,15 +32,15 @@ struct UsageBar: View {
                             )
                         )
                         // Sets a floor, since an extremely thin bar would crush the rounded corners
-                        .frame(width: max(height, geometry.size.width * fraction))
+                        .frame(width: max(height, geometry.size.width * remainingFraction))
                 }
             }
         }
         .frame(height: height)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(L10n.text("common.usedQuota", language: language))
+        .accessibilityLabel(L10n.text("common.remainingQuota", language: language))
         .accessibilityValue(
-            (min(max(percent, 0), 100) / 100)
+            remainingFraction
                 .formatted(
                     .percent
                         .precision(.fractionLength(0))
@@ -73,6 +78,34 @@ enum UsageSeverity {
     }
 }
 
+/// The agent's brand mark. Uses the bundled logo when there is one; otherwise falls back to a
+/// colored monogram so every agent still gets a distinct, identifiable mark.
+struct ServiceMark: View {
+    let agent: AgentUsage
+    var size: CGFloat = 20
+
+    var body: some View {
+        Group {
+            if let logoImageName = agent.logoImageName {
+                Image(logoImageName)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
+            } else {
+                Circle()
+                    .fill(agent.accent)
+                    .overlay(
+                        Text(agent.name.prefix(1))
+                            .font(.system(size: size * 0.5, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+            }
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+}
+
 /// The window-length label. A short window like 5h is given color to stand out.
 struct WindowChip: View {
     let window: UsageWindow
@@ -81,14 +114,14 @@ struct WindowChip: View {
 
     var body: some View {
         Text(L10n.windowLabel(window, language: language))
-            .font(.system(size: 9, weight: .bold))
+            .font(.system(size: 11, weight: .bold))
             // Severity remains visible in the background/outline; primary text keeps
             // compact labels readable in light mode and Increase Contrast.
             .foregroundStyle(.primary)
             .lineLimit(1)
             .minimumScaleFactor(0.75)
-            .padding(.horizontal, 4)
-            .padding(.vertical, 1)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 2)
             .background(
                 (emphasized ? window.tint.opacity(0.16) : Color.primary.opacity(0.07)),
                 in: Capsule()
@@ -98,7 +131,7 @@ struct WindowChip: View {
                     Capsule().stroke(window.tint.opacity(0.65), lineWidth: 0.5)
                 }
             }
-            .frame(minWidth: 26, alignment: .leading)
+            .frame(minWidth: 30, alignment: .leading)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel(
                 L10n.format(

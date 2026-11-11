@@ -3,6 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>com.apple.security.application-groups</key>
-	<array/>
+	<array>
+		<string>Y45S2Q5K9V.com.martinmercer.aiusage</string>
+	</array>
 </dict>
 </plist>

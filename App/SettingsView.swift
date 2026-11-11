@@ -2,7 +2,6 @@ import SwiftUI
 
 struct SettingsView: View {
     @ObservedObject var model: UsageModel
-    @ObservedObject private var updater: AppUpdater
     @State private var isSigningIn = false
     @State private var isSigningInCursor = false
 
@@ -19,7 +18,6 @@ struct SettingsView: View {
 
     init(model: UsageModel) {
         self.model = model
-        _updater = ObservedObject(wrappedValue: model.updater)
     }
 
     var body: some View {
@@ -192,37 +190,13 @@ struct SettingsView: View {
                 Text(L10n.text("settings.order.detail", language: language))
                     .font(.caption)
                     .foregroundStyle(.secondary)
-            }
 
-            Section(L10n.text("settings.updates", language: language)) {
                 HStack {
                     Text(L10n.text("settings.currentVersion", language: language))
                     Spacer()
                     Text(currentVersion)
                         .foregroundStyle(.secondary)
                 }
-
-                Toggle(
-                    L10n.text("settings.checkUpdatesAutomatically", language: language),
-                    isOn: Binding(
-                        get: { updater.automaticallyChecksForUpdates },
-                        set: { updater.setAutomaticallyChecksForUpdates($0) }
-                    )
-                )
-
-                Button {
-                    updater.checkForUpdates()
-                } label: {
-                    Label(
-                        L10n.text("settings.checkForUpdates", language: language),
-                        systemImage: "arrow.triangle.2.circlepath"
-                    )
-                }
-                .disabled(!updater.canCheckForUpdates)
-
-                Text(L10n.text("settings.updates.detail", language: language))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
             }
 
             Section(L10n.text("settings.help", language: language)) {

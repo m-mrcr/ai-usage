@@ -20,14 +20,18 @@ enum MenuBarGauge {
 }
 
 struct GaugeGlyph: View {
+    /// Percent used. Drawn as remaining allowance (gas-tank style): the arc shrinks as usage
+    /// climbs, while its color still tracks `percent` so it still gets more alarming near empty.
     let percent: Double
+
+    private var remainingFraction: Double { 1 - min(max(percent, 0), 100) / 100 }
 
     var body: some View {
         ZStack {
             GaugeArc(fraction: 1)
                 .stroke(Color.primary.opacity(0.28),
                         style: StrokeStyle(lineWidth: 3, lineCap: .round))
-            GaugeArc(fraction: min(max(percent, 0), 100) / 100)
+            GaugeArc(fraction: remainingFraction)
                 .stroke(UsageSeverity.of(percent).color,
                         style: StrokeStyle(lineWidth: 3, lineCap: .round))
         }

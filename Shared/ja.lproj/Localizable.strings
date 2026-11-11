@@ -9,13 +9,14 @@
 "common.reset" = "リセット";
 "common.left.format" = "残り %@";
 "common.usedQuota" = "使用済み割合";
+"common.remainingQuota" = "残りの割合";
 "common.quotaWindow.format" = "%@の上限枠";
 
 "window.usage" = "使用量";
 "window.secondary" = "副枠";
 "window.period" = "期間";
 
-"menubar.summary.format" = "%1$@、%2$@、使用済み%3$@%4$@";
+"menubar.summary.format" = "%1$@、%2$@、残り%3$@%4$@";
 "menubar.staleSuffix" = "、古いデータ";
 "menubar.loading" = "AI使用量を確認中";
 "menubar.unavailable" = "AI使用量を取得できません";
@@ -88,12 +89,8 @@
 "settings.automatic" = "自動";
 "settings.restoreAutomatic" = "自動順に戻す";
 "settings.order.detail" = "カードをドラッグするか、各カードの並べ替えメニューを使います。先頭のカードが優先表示されます。";
-"settings.updates" = "アップデート";
 "settings.currentVersion" = "現在のバージョン";
 "settings.currentVersion.format" = "%1$@（ビルド %2$@）";
-"settings.checkUpdatesAutomatically" = "自動的にアップデートを確認";
-"settings.checkForUpdates" = "アップデートを確認…";
-"settings.updates.detail" = "新しいバージョンはインストール前に検証します。確認なしの自動インストールは有効にしません。";
 "settings.language" = "言語";
 "settings.language.detail" = "アプリ、設定、ヘルプ、ウィジェットの表示言語を変更します。";
 "settings.help" = "ヘルプ";
@@ -125,14 +122,14 @@
 "help.checkAgain.detail" = "再確認は収集をやり直しますが、Grokのログ更新や提供元のレート制限解除を強制するものではありません。";
 "help.privacy" = "サポート時にもOAuth token、Keychain内容、完全なsession log、生のstatusLineログを共有しないでください。";
 
-"widget.description" = "AIエージェントの使用済み割合、鮮度、リセット時刻を表示します";
+"widget.description" = "AIエージェントの残り割合、鮮度、リセット時刻を表示します";
 "AI Usage" = "AI Usage";
 "Agent" = "エージェント";
 "Agents" = "エージェント";
 "Choose which agents to show. The first one leads. Medium widgets show up to four quota rows, and one agent may use multiple rows." = "表示するエージェントを選びます。最初のエージェントが優先されます。中サイズは最大4行で、1つのエージェントが複数行を使う場合があります。";
 "widget.stale.accessibility" = "古い使用量データ";
-"widget.used.accessibility.format" = "%@使用済み";
-"widget.agentUsed.accessibility.format" = "%1$@、%2$@使用済み";
+"widget.remaining.accessibility.format" = "残り%@";
+"widget.agentRemaining.accessibility.format" = "%1$@、残り%2$@";
 "widget.empty.noSnapshot.title" = "使用量データがありません";
 "widget.empty.noSnapshot.detail" = "AI Usageを一度開いて収集してください。";
 "widget.empty.selectedUnavailable.title" = "選択したエージェントを利用できません";

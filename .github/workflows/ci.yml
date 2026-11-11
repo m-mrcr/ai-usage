@@ -31,36 +31,6 @@ jobs:
           bash scripts/check-localizations.sh
           plutil -lint App/Info.plist
 
-          feed_url=$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' App/Info.plist)
-          public_key=$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' App/Info.plist)
-          verify_before_extraction=$(/usr/libexec/PlistBuddy -c 'Print :SUVerifyUpdateBeforeExtraction' App/Info.plist)
-          require_signed_feed=$(/usr/libexec/PlistBuddy -c 'Print :SURequireSignedFeed' App/Info.plist)
-          scheduled_interval=$(/usr/libexec/PlistBuddy -c 'Print :SUScheduledCheckInterval' App/Info.plist)
-          test "$feed_url" = 'https://moritouch.com/ai-usage/appcast.xml'
-          test "$public_key" = 'rUEpVqbT7U1FSjjuxv3WyP4Fqd1WFOqk/71V71fKKs0='
-          test "$verify_before_extraction" = 'true'
-          test "$require_signed_feed" = 'true'
-          test "$scheduled_interval" = '86400'
-
-          package_resolved=AIUsage.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-          test -f "$package_resolved"
-          project_sparkle_version=$(awk '
-            $1 == "Sparkle:" { in_sparkle = 1; next }
-            in_sparkle && $1 == "exactVersion:" { print $2; exit }
-          ' project.yml)
-          test "$project_sparkle_version" = '2.9.6'
-          jq -e '
-            ([.pins[] | select(.identity == "sparkle")] | length) == 1
-            and any(
-              .pins[];
-              .identity == "sparkle"
-              and .kind == "remoteSourceControl"
-              and .location == "https://github.com/sparkle-project/Sparkle"
-              and .state.version == "2.9.6"
-              and .state.revision == "ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a"
-            )
-          ' "$package_resolved" >/dev/null
-
           test ! -e .github/workflows/pages.yml
           rg -F '<link rel="canonical" href="https://moritouch.com/ai-usage">' docs/index.html
           test -s LICENSE

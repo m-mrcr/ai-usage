@@ -9,13 +9,14 @@
 "common.reset" = "Reset";
 "common.left.format" = "%@ left";
 "common.usedQuota" = "Used quota";
+"common.remainingQuota" = "Remaining quota";
 "common.quotaWindow.format" = "Quota window %@";
 
 "window.usage" = "Usage";
 "window.secondary" = "Secondary";
 "window.period" = "Period";
 
-"menubar.summary.format" = "%1$@, %2$@, %3$@ used%4$@";
+"menubar.summary.format" = "%1$@, %2$@, %3$@ left%4$@";
 "menubar.staleSuffix" = ", stale data";
 "menubar.loading" = "Loading AI usage";
 "menubar.unavailable" = "AI usage unavailable";
@@ -88,12 +89,8 @@
 "settings.automatic" = "Automatic";
 "settings.restoreAutomatic" = "Restore automatic";
 "settings.order.detail" = "Drag cards or use each card's reorder menu. The first card leads.";
-"settings.updates" = "Updates";
 "settings.currentVersion" = "Current version";
 "settings.currentVersion.format" = "%1$@ (build %2$@)";
-"settings.checkUpdatesAutomatically" = "Automatically check for updates";
-"settings.checkForUpdates" = "Check for Updates…";
-"settings.updates.detail" = "New versions are verified before installation. Automatic installation is not enabled without your confirmation.";
 "settings.language" = "Language";
 "settings.language.detail" = "Changes the app, Settings, Help, and widget text.";
 "settings.help" = "Help";
@@ -125,14 +122,14 @@
 "help.checkAgain.detail" = "Checking again retries collection, but it cannot force Grok to write new logs or bypass a provider's rate limit.";
 "help.privacy" = "For support, do not share OAuth tokens, Keychain contents, complete session logs, or raw statusLine logs.";
 
-"widget.description" = "Used quota, freshness, and reset times for your AI agents";
+"widget.description" = "Remaining quota, freshness, and reset times for your AI agents";
 "AI Usage" = "AI Usage";
 "Agent" = "Agent";
 "Agents" = "Agents";
 "Choose which agents to show. The first one leads. Medium widgets show up to four quota rows, and one agent may use multiple rows." = "Choose which agents to show. The first one leads. Medium widgets show up to four quota rows, and one agent may use multiple rows.";
 "widget.stale.accessibility" = "Stale usage data";
-"widget.used.accessibility.format" = "%@ used";
-"widget.agentUsed.accessibility.format" = "%1$@, %2$@ used";
+"widget.remaining.accessibility.format" = "%@ left";
+"widget.agentRemaining.accessibility.format" = "%1$@, %2$@ left";
 "widget.empty.noSnapshot.title" = "No usage snapshot";
 "widget.empty.noSnapshot.detail" = "Open AI Usage once to collect data.";
 "widget.empty.selectedUnavailable.title" = "Selected agents unavailable";

@@ -1,14 +1,9 @@
 name: AIUsage
 options:
-  bundleIdPrefix: jp.co.forestx.aiusage
+  bundleIdPrefix: com.martinmercer.aiusage
   deploymentTarget:
     macOS: "14.0"
   createIntermediateGroups: true
-
-packages:
-  Sparkle:
-    url: https://github.com/sparkle-project/Sparkle
-    exactVersion: 2.9.6
 
 schemes:
   AIUsage:
@@ -24,7 +19,7 @@ schemes:
 
 settings:
   base:
-    DEVELOPMENT_TEAM: WTKUV8PPM7
+    DEVELOPMENT_TEAM: Y45S2Q5K9V
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "0.1.21"
@@ -49,10 +44,9 @@ targets:
     dependencies:
       - target: AIUsageWidget
         embed: true
-      - package: Sparkle
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: jp.co.forestx.aiusage
+        PRODUCT_BUNDLE_IDENTIFIER: com.martinmercer.aiusage
         # Keep the target name as AIUsage, and only give the built product a name with a space.
         # This avoids introducing a space into the scheme name or build paths.
         PRODUCT_NAME: AI Usage
@@ -69,11 +63,6 @@ targets:
         LSApplicationCategoryType: public.app-category.utilities
         LSUIElement: true
         NSHumanReadableCopyright: Copyright © 2026 moritouch. Licensed under MIT.
-        SUFeedURL: https://moritouch.com/ai-usage/appcast.xml
-        SUPublicEDKey: "rUEpVqbT7U1FSjjuxv3WyP4Fqd1WFOqk/71V71fKKs0="
-        SUVerifyUpdateBeforeExtraction: true
-        SURequireSignedFeed: true
-        SUScheduledCheckInterval: 86400
 
   # WidgetKit extension. macOS requires it to be sandboxed, so it never reads
   # logs itself and only renders a snapshot passed via the App Group.
@@ -94,7 +83,7 @@ targets:
       - App/Assets.xcassets
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: jp.co.forestx.aiusage.widget
+        PRODUCT_BUNDLE_IDENTIFIER: com.martinmercer.aiusage.widget
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         CODE_SIGN_ENTITLEMENTS: Widget/AIUsageWidget.entitlements
         GENERATE_INFOPLIST_FILE: YES
@@ -131,7 +120,6 @@ targets:
       - Shared/GrokBotCollector.swift
       - Shared/ClaudeWebUsageAPI.swift
       - Shared/ClaudeUsageAPI.swift
-      - Shared/ClaudeExtraUsageAPI.swift
       - Shared/ClaudeOAuthRefresher.swift
       - Shared/SnapshotStore.swift
       - Shared/AppLanguage.swift
@@ -141,5 +129,5 @@ targets:
       - Shared/ja.lproj/Localizable.strings
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: jp.co.forestx.aiusage.tests
+        PRODUCT_BUNDLE_IDENTIFIER: com.martinmercer.aiusage.tests
         GENERATE_INFOPLIST_FILE: YES
